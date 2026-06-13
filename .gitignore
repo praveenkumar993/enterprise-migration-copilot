@@ -1,0 +1,33 @@
+﻿# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+
+# VS Code
+.vscode/
+
+# ChromaDB
+backend/rag/chroma_store/
+
+# Dataset raw files
+dataset_gen/raw_pairs.jsonl
+dataset_gen/skipped.jsonl
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# MLflow
+mlruns/
