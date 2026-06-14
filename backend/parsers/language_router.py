@@ -101,26 +101,13 @@ def route(source: str, dialect: str = "ansi") -> dict[str, Any]:
         return parse_hiveql(source)
 
     if language == "plsql":
-        # Stub — will be replaced in Phase 1.5
-        from utils.ir_builder import build_empty_ir, validate_ir
-        ir = build_empty_ir()
-        ir["source_language"] = "plsql"
-        ir["raw_source"] = source
-        ir["parse_errors"].append(
-            "INFO: PL/SQL parser not yet implemented — coming in Phase 1.5"
-        )
-        return validate_ir(ir)
+        from parsers.plsql_parser import parse_plsql
+        return parse_plsql(source)
+        
 
     if language == "stored_procedure":
-        # Stub — will be replaced in Phase 1.5
-        from utils.ir_builder import build_empty_ir, validate_ir
-        ir = build_empty_ir()
-        ir["source_language"] = "stored_procedure"
-        ir["raw_source"] = source
-        ir["parse_errors"].append(
-            "INFO: Stored Procedure parser not yet implemented — coming in Phase 1.5"
-        )
-        return validate_ir(ir)
+        from parsers.sp_parser import parse_stored_procedure
+        return parse_stored_procedure(source)
 
     # Default: SQL
     return parse_sql(source, dialect=dialect)
