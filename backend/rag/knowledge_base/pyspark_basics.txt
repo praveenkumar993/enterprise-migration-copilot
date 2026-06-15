@@ -1,0 +1,67 @@
+PYSPARK BASICS — Core DataFrame Operations
+
+PATTERN: Read from table
+spark.read.table("schema.table_name")
+spark.read.format("parquet").load("/path/to/data")
+
+PATTERN: Select columns
+df.select("col1", "col2", "col3")
+df.select(F.col("col1"), F.col("col2").alias("renamed"))
+
+PATTERN: Filter rows (WHERE clause equivalent)
+df.filter(F.col("amount") > 1000)
+df.filter((F.col("status") == "active") & (F.col("amount") > 0))
+df.where(F.col("created_at") >= "2024-01-01")
+
+PATTERN: Add or transform columns
+df.withColumn("new_col", F.col("price") * F.col("quantity"))
+df.withColumn("upper_name", F.upper(F.col("name")))
+df.withColumn("year", F.year(F.col("created_at")))
+
+PATTERN: Rename columns
+df.withColumnRenamed("old_name", "new_name")
+
+PATTERN: Drop columns
+df.drop("unnecessary_col")
+
+PATTERN: Cast column type
+df.withColumn("amount", F.col("amount").cast("double"))
+df.withColumn("id", F.col("id").cast("integer"))
+
+PATTERN: ORDER BY equivalent
+df.orderBy(F.col("amount").desc())
+df.orderBy(F.col("name").asc(), F.col("amount").desc())
+
+PATTERN: LIMIT equivalent
+df.limit(100)
+
+PATTERN: DISTINCT equivalent
+df.distinct()
+df.dropDuplicates(["customer_id", "product_id"])
+
+PATTERN: NULL handling (COALESCE equivalent)
+df.withColumn("val", F.coalesce(F.col("val1"), F.col("val2"), F.lit(0)))
+df.filter(F.col("amount").isNotNull())
+df.filter(F.col("name").isNull())
+df.fillna({"amount": 0, "status": "unknown"})
+
+PATTERN: CASE WHEN equivalent
+df.withColumn("category",
+    F.when(F.col("amount") > 10000, "high")
+     .when(F.col("amount") > 1000, "medium")
+     .otherwise("low")
+)
+
+PATTERN: Write output
+df.write.mode("overwrite").parquet("/output/path")
+df.write.mode("append").saveAsTable("schema.output_table")
+df.write.mode("overwrite").format("delta").save("/delta/path")
+
+PATTERN: Cache frequently used DataFrames
+df.cache()
+df.persist(StorageLevel.MEMORY_AND_DISK)
+
+PATTERN: Show and count for debugging
+df.show(20, truncate=False)
+df.count()
+df.printSchema()

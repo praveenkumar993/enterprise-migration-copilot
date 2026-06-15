@@ -109,3 +109,40 @@ def detect_source_language(request: ParseRequest) -> Any:
         "detected_language": language,
         "source_preview": preview,
     }
+class RetrieveRequest(BaseModel):
+    query: str
+    top_k: int = 5
+
+
+class RetrieveResult(BaseModel):
+    text: str
+    source: str
+    score: float
+
+
+class RetrieveResponse(BaseModel):
+    results: list[RetrieveResult]
+    query: str
+    total: int
+
+
+@app.post("/retrieve", response_model=RetrieveResponse)
+def retrieve_context(request: RetrieveRequest) -> Any:
+    """
+    Retrieve relevant PySpark migration patterns using hybrid RAG.
+    Used internally by the Analyzer agent.
+    """
+    if not request.query or not request.query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
+
+    try:
+        from rag.hybrid_retriever import HybridRetriever
+        retriever = HybridRetriever()
+        results = retriever.retrieve(request.query, top_k=request.top_k)
+        return {
+            "results": results,
+            "query": request.query,
+            "total": len(results),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Retrieval failed: {str(e)}")

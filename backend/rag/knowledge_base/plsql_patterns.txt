@@ -1,0 +1,74 @@
+PL/SQL TO PYSPARK MIGRATION PATTERNS
+
+PATTERN: CURSOR loop → DataFrame iteration
+PL/SQL:
+CURSOR c_orders IS SELECT id, amount FROM orders WHERE status = 'pending';
+BEGIN
+  FOR rec IN c_orders LOOP
+    UPDATE orders SET status = 'processed' WHERE id = rec.id;
+  END LOOP;
+END;
+
+PySpark:
+df = spark.read.table("orders")
+updated = df.withColumn("status",
+    F.when(F.col("status") == "pending", F.lit("processed"))
+     .otherwise(F.col("status"))
+)
+updated.write.mode("overwrite").saveAsTable("orders")
+# NOTE: Replaced row-by-row cursor with vectorized DataFrame operation
+
+PATTERN: BULK COLLECT → DataFrame read
+PL/SQL:
+SELECT id, amount BULK COLLECT INTO v_ids, v_amounts FROM orders;
+
+PySpark:
+df = spark.read.table("orders").select("id", "amount")
+# Work with df directly instead of collecting into arrays
+
+PATTERN: EXECUTE IMMEDIATE → parameterized read
+PL/SQL:
+EXECUTE IMMEDIATE 'SELECT * FROM ' || table_name INTO result;
+
+PySpark:
+# Dynamic SQL — requires static analysis or config-driven approach
+table_name = config.get("table_name")  # From config, not dynamic SQL
+df = spark.read.table(table_name)
+# FLAG: Dynamic table names require manual review
+
+PATTERN: EXCEPTION handler → try/except
+PL/SQL:
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN log_error('No data');
+  WHEN OTHERS THEN ROLLBACK;
+
+PySpark:
+try:
+    result = df.groupBy("customer_id").agg(F.sum("amount"))
+    result.write.mode("overwrite").saveAsTable("output")
+except Exception as e:
+    print(f"Migration failed: {e}")
+    raise
+
+PATTERN: OUTPUT parameter → return value
+PL/SQL:
+PROCEDURE get_total(p_customer_id IN NUMBER, p_total OUT NUMBER) AS
+BEGIN
+  SELECT SUM(amount) INTO p_total FROM orders WHERE customer_id = p_customer_id;
+END;
+
+PySpark:
+def get_total(spark, customer_id):
+    result = spark.read.table("orders") \
+                  .filter(F.col("customer_id") == customer_id) \
+                  .agg(F.sum("amount").alias("total"))
+    return result.collect()[0]["total"]
+
+PATTERN: DBMS_OUTPUT → Python logging
+PL/SQL:
+DBMS_OUTPUT.PUT_LINE('Processing complete: ' || v_count || ' records');
+
+PySpark:
+import logging
+logger = logging.getLogger(__name__)
+logger.info(f"Processing complete: {df.count()} records")

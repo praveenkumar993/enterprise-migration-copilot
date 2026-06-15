@@ -1,0 +1,84 @@
+STORED PROCEDURE TO PYSPARK MIGRATION PATTERNS
+
+PATTERN: Temp table → createOrReplaceTempView
+T-SQL:
+SELECT customer_id, SUM(amount) as total INTO #customer_totals FROM orders GROUP BY customer_id
+SELECT c.name, t.total FROM customers c JOIN #customer_totals t ON c.id = t.customer_id
+
+PySpark:
+orders = spark.read.table("orders")
+totals = orders.groupBy("customer_id").agg(F.sum("amount").alias("total"))
+totals.createOrReplaceTempView("customer_totals")
+customers = spark.read.table("customers")
+result = customers.join(totals, customers.id == totals.customer_id)
+
+PATTERN: Table variable → DataFrame
+T-SQL:
+DECLARE @active_customers TABLE (id INT, name VARCHAR(100))
+INSERT INTO @active_customers SELECT id, name FROM customers WHERE status = 'active'
+
+PySpark:
+active_customers = spark.read.table("customers").filter(F.col("status") == "active").select("id", "name")
+
+PATTERN: TRY/CATCH → try/except
+T-SQL:
+BEGIN TRY
+  UPDATE orders SET status = 'processed' WHERE id = @order_id
+END TRY
+BEGIN CATCH
+  PRINT ERROR_MESSAGE()
+END CATCH
+
+PySpark:
+try:
+    df = spark.read.table("orders")
+    updated = df.withColumn("status",
+        F.when(F.col("id") == order_id, F.lit("processed")).otherwise(F.col("status"))
+    )
+    updated.write.mode("overwrite").saveAsTable("orders")
+except Exception as e:
+    logging.error(f"Update failed: {e}")
+    raise
+
+PATTERN: MERGE → Delta Lake MERGE
+T-SQL:
+MERGE INTO orders AS target
+USING updates AS source ON target.id = source.id
+WHEN MATCHED THEN UPDATE SET status = source.status
+WHEN NOT MATCHED THEN INSERT VALUES (source.id, source.status)
+
+PySpark (Delta Lake):
+from delta.tables import DeltaTable
+target = DeltaTable.forName(spark, "orders")
+target.alias("target").merge(
+    updates.alias("source"),
+    "target.id = source.id"
+).whenMatchedUpdate(set={"status": F.col("source.status")}) \
+ .whenNotMatchedInsertAll() \
+ .execute()
+
+PATTERN: BEGIN TRANSACTION → Delta Lake atomicity
+T-SQL:
+BEGIN TRANSACTION
+  UPDATE accounts SET balance = balance - 100 WHERE id = 1
+  UPDATE accounts SET balance = balance + 100 WHERE id = 2
+COMMIT
+
+PySpark (Delta Lake):
+# Delta Lake provides ACID transactions automatically
+# Write both updates in a single operation
+updates = spark.createDataFrame([
+    (1, -100), (2, 100)
+], ["id", "delta"])
+accounts = spark.read.table("accounts")
+result = accounts.join(updates, "id") \
+                 .withColumn("balance", F.col("balance") + F.col("delta"))
+result.write.mode("overwrite").saveAsTable("accounts")
+
+PATTERN: SET NOCOUNT ON → remove
+T-SQL:
+SET NOCOUNT ON  -- Suppresses row count messages
+
+PySpark:
+# No equivalent needed — PySpark does not produce row count messages
+# Simply remove this line

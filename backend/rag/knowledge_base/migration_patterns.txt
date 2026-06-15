@@ -1,0 +1,108 @@
+MIGRATION PATTERNS — SQL to PySpark Equivalents
+
+PATTERN: Simple SELECT to PySpark
+SQL:
+SELECT customer_id, name, amount FROM orders WHERE amount > 1000
+
+PySpark:
+df = spark.read.table("orders")
+result = df.filter(F.col("amount") > 1000).select("customer_id", "name", "amount")
+
+PATTERN: GROUP BY with aggregations
+SQL:
+SELECT customer_id, COUNT(*) as order_count, SUM(amount) as total
+FROM orders
+GROUP BY customer_id
+
+PySpark:
+df = spark.read.table("orders")
+result = df.groupBy("customer_id").agg(
+    F.count("*").alias("order_count"),
+    F.sum("amount").alias("total")
+)
+
+PATTERN: INNER JOIN
+SQL:
+SELECT o.id, c.name, o.amount
+FROM orders o
+INNER JOIN customers c ON o.customer_id = c.id
+
+PySpark:
+orders = spark.read.table("orders")
+customers = spark.read.table("customers")
+result = orders.join(customers, orders.customer_id == customers.id, "inner") \
+               .select(orders.id, customers.name, orders.amount)
+
+PATTERN: LEFT JOIN
+SQL:
+SELECT c.id, c.name, o.amount
+FROM customers c
+LEFT JOIN orders o ON c.id = o.customer_id
+
+PySpark:
+customers = spark.read.table("customers")
+orders = spark.read.table("orders")
+result = customers.join(orders, customers.id == orders.customer_id, "left") \
+                  .select(customers.id, customers.name, orders.amount)
+
+PATTERN: CTE (WITH clause)
+SQL:
+WITH ranked_orders AS (
+    SELECT customer_id, amount,
+           RANK() OVER (PARTITION BY customer_id ORDER BY amount DESC) as rnk
+    FROM orders
+)
+SELECT * FROM ranked_orders WHERE rnk = 1
+
+PySpark:
+from pyspark.sql import Window
+orders = spark.read.table("orders")
+window = Window.partitionBy("customer_id").orderBy(F.col("amount").desc())
+ranked = orders.withColumn("rnk", F.rank().over(window))
+result = ranked.filter(F.col("rnk") == 1)
+
+PATTERN: Subquery in WHERE
+SQL:
+SELECT * FROM orders
+WHERE customer_id IN (SELECT id FROM customers WHERE tier = 'premium')
+
+PySpark:
+orders = spark.read.table("orders")
+customers = spark.read.table("customers")
+premium_ids = customers.filter(F.col("tier") == "premium").select("id")
+result = orders.join(premium_ids, orders.customer_id == premium_ids.id, "inner") \
+               .drop(premium_ids.id)
+
+PATTERN: HAVING clause
+SQL:
+SELECT customer_id, SUM(amount) as total
+FROM orders
+GROUP BY customer_id
+HAVING SUM(amount) > 10000
+
+PySpark:
+df = spark.read.table("orders")
+result = df.groupBy("customer_id") \
+           .agg(F.sum("amount").alias("total")) \
+           .filter(F.col("total") > 10000)
+
+PATTERN: INSERT INTO SELECT
+SQL:
+INSERT INTO summary_table SELECT customer_id, SUM(amount) FROM orders GROUP BY customer_id
+
+PySpark:
+df = spark.read.table("orders")
+result = df.groupBy("customer_id").agg(F.sum("amount").alias("total"))
+result.write.mode("append").saveAsTable("summary_table")
+
+PATTERN: UPDATE (no direct equivalent — use overwrite)
+SQL:
+UPDATE orders SET status = 'processed' WHERE created_at < '2024-01-01'
+
+PySpark:
+df = spark.read.table("orders")
+updated = df.withColumn("status",
+    F.when(F.col("created_at") < "2024-01-01", F.lit("processed"))
+     .otherwise(F.col("status"))
+)
+updated.write.mode("overwrite").saveAsTable("orders")

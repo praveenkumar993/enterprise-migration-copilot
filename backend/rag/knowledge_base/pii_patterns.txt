@@ -1,0 +1,72 @@
+PII PATTERNS — Fintech Data Risk Detection
+
+CRITICAL PII COLUMN NAMES — Flag these immediately:
+pan_number, pan_no, pan
+aadhaar, aadhaar_number, uid
+account_number, account_no, acct_no
+card_number, credit_card, debit_card, card_no
+cvv, cvv2, cvc
+ssn, social_security, social_security_number
+passport_number, passport_no
+driver_license, dl_number
+dob, date_of_birth, birth_date
+email, email_address, email_id
+phone, phone_number, mobile, mobile_number, contact_number
+ifsc, ifsc_code
+swift_code, bic_code
+routing_number, aba_routing
+salary, income, annual_income, ctc
+tax_id, tin, gstin
+voter_id, voter_id_number
+biometric_id, fingerprint_id
+
+REGEX PATTERNS FOR PII DETECTION:
+PAN Number (India): [A-Z]{5}[0-9]{4}[A-Z]{1}
+Aadhaar (India): [2-9]{1}[0-9]{11}
+Credit Card: [0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}
+Email: [a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}
+Phone (India): [6-9][0-9]{9}
+IFSC Code: [A-Z]{4}0[A-Z0-9]{6}
+
+REQUIRED PYSPARK MASKING PATTERNS:
+
+PATTERN: Mask PAN number
+df.withColumn("pan_number",
+    F.regexp_replace(F.col("pan_number"), r"[A-Z]{5}[0-9]{4}", "XXXXX0000")
+)
+
+PATTERN: Mask email
+df.withColumn("email",
+    F.regexp_replace(F.col("email"), r"(^[^@]+)", "****")
+)
+
+PATTERN: Mask phone number
+df.withColumn("phone",
+    F.concat(F.lit("****"), F.substring(F.col("phone"), -4, 4))
+)
+
+PATTERN: Mask credit card
+df.withColumn("card_number",
+    F.concat(F.lit("****-****-****-"), F.substring(F.col("card_number"), -4, 4))
+)
+
+PATTERN: Hash sensitive ID for analytics
+from pyspark.sql.functions import sha2
+df.withColumn("customer_id_hash", F.sha2(F.col("customer_id").cast("string"), 256))
+
+NULL SAFETY ON JOIN KEYS — Always check before joining:
+RULE: Never join on a column that can contain NULLs without filtering first
+BAD:
+df1.join(df2, df1.customer_id == df2.customer_id)
+
+GOOD:
+df1_clean = df1.filter(F.col("customer_id").isNotNull())
+df2_clean = df2.filter(F.col("customer_id").isNotNull())
+result = df1_clean.join(df2_clean, "customer_id")
+
+COST FLAGS — Operations that increase Spark cluster cost:
+- df.collect() on large datasets — pulls to driver
+- crossJoin without filter — cartesian product
+- repartition(N) where N is very large — excessive shuffle
+- write without partitionBy on large tables — single partition write
+- No cache() on DataFrames used 3+ times in same job

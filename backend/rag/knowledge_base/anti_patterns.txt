@@ -1,0 +1,81 @@
+ANTI-PATTERNS — Common PySpark Mistakes to Avoid
+
+ANTI-PATTERN: Collecting large DataFrames
+BAD:
+data = df.collect()  # Pulls ALL data to driver — OOM risk
+
+GOOD:
+df.write.parquet("/output/path")  # Write to storage instead
+df.show(100)  # Preview only
+data = df.limit(1000).collect()  # Collect only small subsets
+
+ANTI-PATTERN: Missing cache on reused DataFrames
+BAD:
+result1 = df.filter(F.col("status") == "active").count()
+result2 = df.filter(F.col("status") == "active").agg(F.sum("amount"))
+# df scanned twice
+
+GOOD:
+active = df.filter(F.col("status") == "active").cache()
+result1 = active.count()
+result2 = active.agg(F.sum("amount"))
+active.unpersist()
+
+ANTI-PATTERN: Cartesian join (missing join condition)
+BAD:
+result = df1.crossJoin(df2)  # Every row joined to every row — explosion
+
+GOOD:
+result = df1.join(df2, df1.customer_id == df2.id, "inner")
+
+ANTI-PATTERN: UDF when built-in function exists
+BAD:
+from pyspark.sql.functions import udf
+upper_udf = udf(lambda x: x.upper())
+df.withColumn("upper", upper_udf(F.col("name")))
+
+GOOD:
+df.withColumn("upper", F.upper(F.col("name")))
+
+ANTI-PATTERN: Python loop over DataFrame rows
+BAD:
+for row in df.collect():
+    process(row)  # Serial, defeats Spark's purpose
+
+GOOD:
+df.foreach(process)  # Distributed
+df.mapPartitions(process_batch)  # Batch processing
+
+ANTI-PATTERN: SELECT * in production
+BAD:
+df = spark.read.table("huge_table").select("*")
+
+GOOD:
+df = spark.read.table("huge_table").select("col1", "col2", "col3")
+
+ANTI-PATTERN: Skewed joins without salting
+BAD:
+result = df1.join(df2, "customer_id")  # If one customer_id dominates — skew
+
+GOOD:
+# Add salt to distribute skewed keys
+import random
+salt_factor = 10
+df1_salted = df1.withColumn("salt", (F.rand() * salt_factor).cast("int"))
+df2_exploded = df2.withColumn("salt", F.explode(F.array([F.lit(i) for i in range(salt_factor)])))
+result = df1_salted.join(df2_exploded, ["customer_id", "salt"])
+
+ANTI-PATTERN: Repartition without reason
+BAD:
+df.repartition(1000)  # Creates 1000 tasks for a small dataset
+
+GOOD:
+# Repartition only when you know data size warrants it
+df.repartition(F.col("customer_id"))  # Repartition by key for downstream joins
+
+ANTI-PATTERN: Writing without partitioning large datasets
+BAD:
+df.write.mode("overwrite").parquet("/output")
+
+GOOD:
+df.write.mode("overwrite").partitionBy("year", "month").parquet("/output")

@@ -1,0 +1,82 @@
+WINDOW FUNCTIONS — SQL to PySpark Equivalents
+
+IMPORT REQUIRED:
+from pyspark.sql import Window
+import pyspark.sql.functions as F
+
+PATTERN: RANK() OVER (PARTITION BY ... ORDER BY ...)
+SQL:
+RANK() OVER (PARTITION BY customer_id ORDER BY amount DESC) as rnk
+
+PySpark:
+window = Window.partitionBy("customer_id").orderBy(F.col("amount").desc())
+df.withColumn("rnk", F.rank().over(window))
+
+PATTERN: DENSE_RANK()
+SQL:
+DENSE_RANK() OVER (PARTITION BY region ORDER BY sales DESC) as dense_rnk
+
+PySpark:
+window = Window.partitionBy("region").orderBy(F.col("sales").desc())
+df.withColumn("dense_rnk", F.dense_rank().over(window))
+
+PATTERN: ROW_NUMBER()
+SQL:
+ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY created_at DESC) as rn
+
+PySpark:
+window = Window.partitionBy("customer_id").orderBy(F.col("created_at").desc())
+df.withColumn("rn", F.row_number().over(window))
+
+PATTERN: LAG() — previous row value
+SQL:
+LAG(amount, 1, 0) OVER (PARTITION BY customer_id ORDER BY created_at) as prev_amount
+
+PySpark:
+window = Window.partitionBy("customer_id").orderBy("created_at")
+df.withColumn("prev_amount", F.lag("amount", 1, 0).over(window))
+
+PATTERN: LEAD() — next row value
+SQL:
+LEAD(amount, 1) OVER (PARTITION BY customer_id ORDER BY created_at) as next_amount
+
+PySpark:
+window = Window.partitionBy("customer_id").orderBy("created_at")
+df.withColumn("next_amount", F.lead("amount", 1).over(window))
+
+PATTERN: SUM() OVER — running total
+SQL:
+SUM(amount) OVER (PARTITION BY customer_id ORDER BY created_at
+                  ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as running_total
+
+PySpark:
+window = Window.partitionBy("customer_id").orderBy("created_at") \
+               .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+df.withColumn("running_total", F.sum("amount").over(window))
+
+PATTERN: FIRST_VALUE / LAST_VALUE
+SQL:
+FIRST_VALUE(amount) OVER (PARTITION BY customer_id ORDER BY created_at) as first_amt
+
+PySpark:
+window = Window.partitionBy("customer_id").orderBy("created_at")
+df.withColumn("first_amt", F.first("amount").over(window))
+
+PATTERN: NTILE
+SQL:
+NTILE(4) OVER (ORDER BY amount DESC) as quartile
+
+PySpark:
+window = Window.orderBy(F.col("amount").desc())
+df.withColumn("quartile", F.ntile(4).over(window))
+
+PATTERN: Get top N per group (common pattern)
+SQL:
+SELECT * FROM (
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY amount DESC) as rn
+    FROM orders
+) WHERE rn <= 3
+
+PySpark:
+window = Window.partitionBy("customer_id").orderBy(F.col("amount").desc())
+result = orders.withColumn("rn", F.row_number().over(window)).filter(F.col("rn") <= 3)
