@@ -156,3 +156,71 @@ def test_risk_low_for_clean_migration():
     clean_code = "import pyspark.sql.functions as F\ndf = spark.read.table('orders')\nresult = df.select('id', 'name', 'amount')\n"
     result = check_risk(clean_ir, clean_code)
     assert result["risk_level"] in ("low", "medium")
+
+# --- Pipeline Integration Tests ---
+
+def test_pipeline_imports_without_error():
+    """Pipeline graph imports and compiles without error."""
+    try:
+        from pipeline.graph import run_pipeline, build_graph
+        graph = build_graph()
+        assert graph is not None
+    except Exception as e:
+        pytest.fail(f"Pipeline import/build failed: {e}")
+
+
+def test_pipeline_runs_sql_end_to_end():
+    """Pipeline runs end to end for a simple SQL input."""
+    from pipeline.graph import run_pipeline
+    source = "SELECT customer_id, SUM(amount) as total FROM orders GROUP BY customer_id"
+    result = run_pipeline(source)
+    # Accept all valid terminal statuses including error (HF model may not be ready)
+    assert result["status"] in ("success", "low_confidence", "failed", "error")
+    assert "source_language" in result
+    assert result["source_language"] == "sql"
+    assert "pyspark_code" in result
+    assert "validation" in result
+    assert "risk_result" in result
+
+
+def test_pipeline_detects_plsql_language():
+    """Pipeline correctly detects PL/SQL or SP language from procedural source."""
+    from pipeline.graph import run_pipeline
+    # Uses BEGIN/END + EXCEPTION — pure PL/SQL without CREATE PROCEDURE
+    source = """
+    DECLARE
+        v_amount NUMBER;
+    BEGIN
+        SELECT SUM(amount) INTO v_amount FROM orders WHERE status = 'pending';
+        DBMS_OUTPUT.PUT_LINE('Total: ' || v_amount);
+        EXCEPTION WHEN OTHERS THEN ROLLBACK;
+    END;
+    """
+    result = run_pipeline(source)
+    assert result["source_language"] == "plsql"
+    assert len(result.get("analyzer_output", {}).get("procedural_flags", [])) > 0
+
+
+def test_pipeline_risk_detects_pii_in_sql():
+    """Risk agent detects PII columns pan_number and email directly."""
+    from agents.risk_compliance import check_risk
+    pii_ir = {
+        **SIMPLE_IR,
+        "columns": ["customer_id", "pan_number", "email", "amount"],
+        "tables": ["transactions"],
+        "raw_source": "SELECT customer_id, pan_number, email, amount FROM transactions",
+    }
+    pyspark_code = "df = spark.read.table('transactions').select('customer_id', 'pan_number', 'email', 'amount')"
+    result = check_risk(pii_ir, pyspark_code)
+    assert len(result["pii_columns"]) > 0
+    assert "pan_number" in result["pii_columns"] or "email" in result["pii_columns"]
+    assert result["risk_score"] > 0
+
+
+def test_pipeline_returns_error_status_not_exception():
+    """Pipeline returns error status for empty input, does not raise."""
+    from pipeline.graph import run_pipeline
+    result = run_pipeline("")
+    assert "status" in result
+    # Should not raise — returns error state
+

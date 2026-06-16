@@ -10,7 +10,6 @@ from typing import Any
 from parsers.sql_parser import parse_sql
 from parsers.hiveql_parser import parse_hiveql
 
-
 # Stored Procedure indicators (checked first — most specific)
 SP_PATTERNS = [
     r"\bCREATE\s+(OR\s+REPLACE\s+)?PROCEDURE\b",
@@ -64,7 +63,7 @@ def detect_language(source: str) -> str:
         return "sql"
 
     source_upper = source.upper()
-
+    
     # 1. Check Stored Procedure first
     for pattern in SP_PATTERNS:
         if re.search(pattern, source_upper, re.DOTALL):

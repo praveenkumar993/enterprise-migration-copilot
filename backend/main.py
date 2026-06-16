@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from pipeline.graph import run_pipeline
 
 from parsers.language_router import route, detect_language
 
@@ -146,3 +147,52 @@ def retrieve_context(request: RetrieveRequest) -> Any:
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Retrieval failed: {str(e)}")
+class MigrateRequest(BaseModel):
+    source: str
+    source_language: str = "auto"
+    dialect: str = ""
+
+
+class MigrateResponse(BaseModel):
+    status: str
+    source_language: str
+    pyspark_code: str
+    validation: dict
+    review: dict
+    optimization: dict
+    risk_result: dict
+    analyzer_output: dict
+    processing_time_ms: float
+    error: str
+
+
+@app.post("/migrate", response_model=MigrateResponse)
+def migrate_source(request: MigrateRequest) -> Any:
+    """
+    Full migration pipeline — parse, analyze, retrieve, generate,
+    validate, review, optimize, and risk-check in one call.
+    Returns generated PySpark code with full quality report.
+    """
+    if not request.source or not request.source.strip():
+        raise HTTPException(status_code=400, detail="Source code cannot be empty")
+
+    try:
+        result = run_pipeline(
+            source=request.source,
+            source_language=request.source_language,
+            dialect=request.dialect,
+        )
+        return {
+            "status": result.get("status", "error"),
+            "source_language": result.get("source_language", "unknown"),
+            "pyspark_code": result.get("pyspark_code", ""),
+            "validation": result.get("validation", {}),
+            "review": result.get("review", {}),
+            "optimization": result.get("optimization", {}),
+            "risk_result": result.get("risk_result", {}),
+            "analyzer_output": result.get("analyzer_output", {}),
+            "processing_time_ms": result.get("processing_time_ms", 0.0),
+            "error": result.get("error", ""),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Migration failed: {str(e)}")
