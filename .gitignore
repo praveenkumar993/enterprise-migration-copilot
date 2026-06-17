@@ -18,9 +18,12 @@ build/
 # ChromaDB
 backend/rag/chroma_store/
 
-# Dataset raw files
+# Dataset raw files and validator outputs
 dataset_gen/raw_pairs.jsonl
+dataset_gen/seeds/skipped_claude_seeds.jsonl
+dataset_gen/seeds/valid_claude_seeds.jsonl
 dataset_gen/skipped.jsonl
+dataset_gen/valid_pairs.jsonl
 
 # Jupyter
 .ipynb_checkpoints/

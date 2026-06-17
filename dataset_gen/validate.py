@@ -24,7 +24,10 @@ DATAFRAME_OP_PATTERNS = [
     r"\.select\(", r"\.filter\(", r"\.where\(", r"\.groupBy\(",
     r"\.join\(", r"\.agg\(", r"\.withColumn\(", r"\.orderBy\(",
     r"\.union\(", r"\.distinct\(", r"\.drop\(", r"\.limit\(",
-    r"spark\.read", r"spark\.sql\(", r"\.write\.",
+    r"spark\.read", r"spark\.sql\(", r"\.write\.", r"spark\.table\(",
+    r"\.show\(", r"\.count\(", r"\.collect\(", r"\.toPandas\(",
+    r"\.createDataFrame\(", r"\.repartition\(", r"\.cache\(",
+    r"\.persist\(", r"DeltaTable\.",
 ]
 
 
