@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 HF_TOKEN = os.getenv("HF_TOKEN", "")
-HF_USERNAME = os.getenv("HF_USERNAME", "praveenkumar993")
+HF_USERNAME = os.getenv("HF_USERNAME", "praveends")
 DATASET_REPO = f"{HF_USERNAME}/enterprise-migration-dataset"
 
 SEEDS_PATH = Path("dataset_gen/seeds/claude_seeds.jsonl")

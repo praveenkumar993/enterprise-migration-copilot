@@ -24,6 +24,7 @@ dataset_gen/seeds/skipped_claude_seeds.jsonl
 dataset_gen/seeds/valid_claude_seeds.jsonl
 dataset_gen/skipped.jsonl
 dataset_gen/valid_pairs.jsonl
+dataset_gen/final_dataset.jsonl
 
 # Jupyter
 .ipynb_checkpoints/
