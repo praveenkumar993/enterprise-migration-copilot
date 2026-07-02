@@ -5,6 +5,7 @@ validate → review → optimize → risk → finalize
 
 Each node has try/except — pipeline never crashes, always returns state.
 LangSmith tracing via @traceable on each node.
+Prometheus metrics recorded per-agent and at finalize.
 """
 
 import time
@@ -14,7 +15,7 @@ from dotenv import load_dotenv
 
 from langgraph.graph import StateGraph, END
 from langsmith import traceable
-
+from utils.metrics import record_migration, record_agent
 from parsers.language_router import route as language_router_route
 from agents.analyzer import analyze
 from agents.migrator import migrate
@@ -68,6 +69,7 @@ class PipelineState(TypedDict):
 @traceable(name="node_route")
 def node_route(state: PipelineState) -> PipelineState:
     """Parse source code into unified IR using language router."""
+    node_start = time.time()
     try:
         source = state.get("source", "")
         dialect = state.get("dialect", "")
@@ -75,13 +77,14 @@ def node_route(state: PipelineState) -> PipelineState:
         ir = language_router_route(source, dialect=dialect)
         state["ir"] = ir
         state["source_language"] = ir.get("source_language", "sql")
+
+        record_agent("route", (time.time() - node_start) * 1000)
         return state
 
     except Exception as e:
-        #state["rag_context"] = []
-        #state["error"] = f"node_retrieve warning (non-fatal): {str(e)}"
         state["error"] = f"node_route failed: {str(e)}"
         state["status"] = "error"
+        record_agent("route", (time.time() - node_start) * 1000)
         return state
 
 
@@ -90,15 +93,19 @@ def node_analyze(state: PipelineState) -> PipelineState:
     """Analyze IR and produce migration strategy."""
     if state.get("status") == "error":
         return state
+    node_start = time.time()
     try:
         ir = state.get("ir", {})
         analyzer_output = analyze(ir)
         state["analyzer_output"] = analyzer_output
+
+        record_agent("analyzer", (time.time() - node_start) * 1000)
         return state
 
     except Exception as e:
         state["error"] = f"node_analyze failed: {str(e)}"
         state["status"] = "error"
+        record_agent("analyzer", (time.time() - node_start) * 1000)
         return state
 
 
@@ -107,6 +114,7 @@ def node_retrieve(state: PipelineState) -> PipelineState:
     """Retrieve relevant PySpark patterns from hybrid RAG."""
     if state.get("status") == "error":
         return state
+    node_start = time.time()
     try:
         retriever = get_retriever()
         analyzer_output = state.get("analyzer_output", {})
@@ -134,11 +142,14 @@ def node_retrieve(state: PipelineState) -> PipelineState:
                     seen.add(key)
 
         state["rag_context"] = rag_context
+
+        record_agent("retrieve", (time.time() - node_start) * 1000)
         return state
 
     except Exception as e:
         state["error"] = f"node_retrieve failed: {str(e)}"
         state["status"] = "error"
+        record_agent("retrieve", (time.time() - node_start) * 1000)
         return state
 
 
@@ -147,6 +158,7 @@ def node_migrate(state: PipelineState) -> PipelineState:
     """Generate PySpark code using fine-tuned LLM."""
     if state.get("status") == "error":
         return state
+    node_start = time.time()
     try:
         ir = state.get("ir", {})
         analyzer_output = state.get("analyzer_output", {})
@@ -154,11 +166,14 @@ def node_migrate(state: PipelineState) -> PipelineState:
 
         result = migrate(ir, analyzer_output, rag_context)
         state["pyspark_code"] = result.get("pyspark_code", "")
+
+        record_agent("migrator", (time.time() - node_start) * 1000)
         return state
 
     except Exception as e:
         state["error"] = f"node_migrate failed: {str(e)}"
         state["status"] = "error"
+        record_agent("migrator", (time.time() - node_start) * 1000)
         return state
 
 
@@ -167,17 +182,21 @@ def node_validate(state: PipelineState) -> PipelineState:
     """Validate generated PySpark code against IR."""
     if state.get("status") == "error":
         return state
+    node_start = time.time()
     try:
         ir = state.get("ir", {})
         pyspark_code = state.get("pyspark_code", "")
 
         validation = validate(ir, pyspark_code)
         state["validation"] = validation
+
+        record_agent("validator", (time.time() - node_start) * 1000)
         return state
 
     except Exception as e:
         state["error"] = f"node_validate failed: {str(e)}"
         state["status"] = "error"
+        record_agent("validator", (time.time() - node_start) * 1000)
         return state
 
 
@@ -186,17 +205,21 @@ def node_review(state: PipelineState) -> PipelineState:
     """Semantic review of generated PySpark code."""
     if state.get("status") == "error":
         return state
+    node_start = time.time()
     try:
         ir = state.get("ir", {})
         pyspark_code = state.get("pyspark_code", "")
 
         review_result = review(ir, pyspark_code)
         state["review_result"] = review_result
+
+        record_agent("reviewer", (time.time() - node_start) * 1000)
         return state
 
     except Exception as e:
         state["error"] = f"node_review failed: {str(e)}"
         state["status"] = "error"
+        record_agent("reviewer", (time.time() - node_start) * 1000)
         return state
 
 
@@ -205,15 +228,19 @@ def node_optimize(state: PipelineState) -> PipelineState:
     """Detect anti-patterns and suggest optimizations."""
     if state.get("status") == "error":
         return state
+    node_start = time.time()
     try:
         pyspark_code = state.get("pyspark_code", "")
         optimization = optimize(pyspark_code)
         state["optimization"] = optimization
+
+        record_agent("optimizer", (time.time() - node_start) * 1000)
         return state
 
     except Exception as e:
         state["error"] = f"node_optimize failed: {str(e)}"
         state["status"] = "error"
+        record_agent("optimizer", (time.time() - node_start) * 1000)
         return state
 
 
@@ -222,26 +249,36 @@ def node_risk(state: PipelineState) -> PipelineState:
     """Run risk and compliance checks."""
     if state.get("status") == "error":
         return state
+    node_start = time.time()
     try:
         ir = state.get("ir", {})
         pyspark_code = state.get("pyspark_code", "")
 
         risk = check_risk(ir, pyspark_code)
         state["risk_result"] = risk
+
+        # Record each procedural flag for the Grafana panel
+        from utils.metrics import record_procedural_flag
+        for flag in risk.get("compliance_flags", []):
+            record_procedural_flag(flag)
+
+        record_agent("risk_compliance", (time.time() - node_start) * 1000)
         return state
 
     except Exception as e:
         state["error"] = f"node_risk failed: {str(e)}"
         state["status"] = "error"
+        record_agent("risk_compliance", (time.time() - node_start) * 1000)
         return state
 
 
 @traceable(name="node_finalize")
 def node_finalize(state: PipelineState) -> PipelineState:
-    """Set final status and processing time."""
+    """Set final status, processing time, and record overall migration metrics."""
     try:
         validation = state.get("validation", {})
         review_result = state.get("review_result", {})
+        risk_result = state.get("risk_result", {})
 
         validation_passed = validation.get("passed", False)
         semantic_score = review_result.get("semantic_score", 0.0)
@@ -259,7 +296,17 @@ def node_finalize(state: PipelineState) -> PipelineState:
 
         # Processing time
         start = state.get("start_time", time.time())
-        state["processing_time_ms"] = round((time.time() - start) * 1000, 2)
+        processing_time_ms = round((time.time() - start) * 1000, 2)
+        state["processing_time_ms"] = processing_time_ms
+
+        # Record overall migration metrics
+        record_migration(
+            status=state.get("status", "unknown"),
+            source_language=state.get("source_language", "unknown"),
+            duration_ms=processing_time_ms,
+            risk_score=risk_result.get("risk_score", 0.0),
+            validation_score=validation.get("validation_score", 0.0),
+        )
 
         return state
 

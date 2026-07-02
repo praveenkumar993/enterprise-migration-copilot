@@ -32,7 +32,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
+from prometheus_fastapi_instrumentator import Instrumentator
+Instrumentator().instrument(app).expose(app)
 # ---------- Request / Response Models ----------
 
 class ParseRequest(BaseModel):
