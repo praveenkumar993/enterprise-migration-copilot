@@ -1,7 +1,7 @@
 """
 Migrator Agent — LLM-powered PySpark code generation.
 Calls HuggingFace Inference API with fine-tuned Phi-3.5-mini model.
-Falls back to HF free Inference API if fine-tuned model is not ready.
+Falls back to Qwen2.5-Coder if fine-tuned model is cold-starting.
 """
 
 import os
@@ -13,13 +13,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 HF_TOKEN = os.getenv("HF_TOKEN", "")
-HF_USERNAME = os.getenv("HF_USERNAME", "praveenkumar993")
+HF_USERNAME = os.getenv("HF_USERNAME", "praveends")
 
-# Primary: fine-tuned model (available after Day 12)
-PRIMARY_MODEL = f"{HF_USERNAME}/phi-enterprise-migration"
+# Primary: our best fine-tuned model (Phi-3.5-mini, 57% benchmark pass rate)
+PRIMARY_MODEL = f"{HF_USERNAME}/migration-copilot-phi-3-5-mini-instruct"
 
-# Fallback: public HF model for development
-FALLBACK_MODEL = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
+# Fallback 1: our second-best fine-tuned model (Qwen2.5, 45% pass rate)
+FALLBACK_MODEL_1 = f"{HF_USERNAME}/migration-copilot-qwen2-5-coder-1-5b-instruct"
+
+# Fallback 2: public base model — always available, no fine-tuning
+FALLBACK_MODEL_2 = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
 
 HF_API_BASE = "https://api-inference.huggingface.co/models"
 
@@ -33,47 +36,39 @@ def build_prompt(
     rag_context: list[dict],
 ) -> str:
     """
-    Build the instruction prompt for the fine-tuned model.
-
-    Args:
-        ir: Unified IR dict
-        analyzer_output: Output from Analyzer agent
-        rag_context: Retrieved PySpark patterns from RAG
-
-    Returns:
-        Formatted prompt string
+    Build the instruction prompt matching the exact format used during fine-tuning.
+    Using the same ### Instruction / ### Input / ### Response format is critical —
+    the fine-tuned model was trained on this exact structure.
     """
-    source_language = ir.get("source_language", "sql")
+    source_language = ir.get("source_language", "sql").upper()
+    difficulty = analyzer_output.get("complexity", "medium")
     raw_source = ir.get("raw_source", "")
     procedural_flags = analyzer_output.get("procedural_flags", [])
-    migration_strategy = analyzer_output.get("migration_strategy", "")
 
-    # Format RAG context
+    # Format RAG context as inline hints
     rag_text = ""
     if rag_context:
         rag_snippets = [r.get("text", "") for r in rag_context[:3]]
         rag_text = "\n\n".join(rag_snippets)
 
-    # Procedural warning
+    # Procedural warning for cursors, exceptions, temp tables etc.
     procedural_note = ""
     if procedural_flags:
         flags_str = "\n".join(f"- {f}" for f in procedural_flags[:5])
         procedural_note = (
-            f"\nNote: The following procedural constructs cannot be auto-converted "
-            f"and require manual review:\n{flags_str}\n"
+            f"\nNote: The following procedural constructs require manual review:\n"
+            f"{flags_str}\n"
             f"Add a # NOTE comment in your PySpark code for each flagged construct.\n"
         )
 
+    # RAG context note
+    rag_note = f"\nReference PySpark patterns:\n{rag_text}\n" if rag_text else ""
+
+    # This prompt format matches EXACTLY what was used during fine-tuning
     prompt = f"""### Instruction:
-Convert the following {source_language} code to PySpark DataFrame API code.
-Use spark as the SparkSession variable name.
-Import pyspark.sql.functions as F at the top.
-{procedural_note}
-Context — PySpark patterns to follow:
-{rag_text}
-
-Migration strategy: {migration_strategy}
-
+Convert the following {source_language} code to PySpark.
+Difficulty: {difficulty}
+{procedural_note}{rag_note}
 ### Input:
 {raw_source}
 
@@ -84,11 +79,7 @@ Migration strategy: {migration_strategy}
 
 def call_hf_api(model: str, prompt: str) -> tuple[str, bool]:
     """
-    Call HuggingFace Inference API.
-
-    Args:
-        model: HF model path (username/model-name)
-        prompt: Formatted prompt string
+    Call HuggingFace Inference API with retry on cold start (503).
 
     Returns:
         (generated_text, success) tuple
@@ -109,22 +100,29 @@ def call_hf_api(model: str, prompt: str) -> tuple[str, bool]:
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=60)
 
-            # Handle cold start / loading
+            # Model cold start — wait and retry
             if response.status_code == 503:
-                body = response.json()
-                if "loading" in str(body).lower() or "estimated_time" in body:
-                    wait = body.get("estimated_time", RETRY_WAIT)
-                    time.sleep(min(wait, 30))
-                    continue
+                try:
+                    body = response.json()
+                    wait = min(body.get("estimated_time", RETRY_WAIT), 30)
+                except Exception:
+                    wait = RETRY_WAIT
+                time.sleep(wait)
+                continue
 
             if response.status_code == 200:
                 data = response.json()
                 if isinstance(data, list) and data:
-                    return data[0].get("generated_text", ""), True
+                    text = data[0].get("generated_text", "")
+                    return text, bool(text.strip())
                 elif isinstance(data, dict):
-                    return data.get("generated_text", ""), True
+                    text = data.get("generated_text", "")
+                    return text, bool(text.strip())
 
-            # Other error
+            # Non-retryable error (404 model not found, 401 auth etc.)
+            if response.status_code in (401, 404):
+                return "", False
+
             if attempt < MAX_RETRIES - 1:
                 time.sleep(RETRY_WAIT)
 
@@ -138,6 +136,27 @@ def call_hf_api(model: str, prompt: str) -> tuple[str, bool]:
     return "", False
 
 
+def clean_output(raw: str) -> str:
+    """
+    Strip any repeated prompt artifacts from model output.
+    Some models echo the ### Response: marker or repeat the input.
+    """
+    # Cut off at second ### if model starts repeating
+    if "### Instruction:" in raw:
+        raw = raw[:raw.index("### Instruction:")].strip()
+    if "### Input:" in raw:
+        raw = raw[:raw.index("### Input:")].strip()
+    # Strip leading/trailing whitespace and markdown fences
+    raw = raw.strip()
+    if raw.startswith("```python"):
+        raw = raw[9:]
+    if raw.startswith("```"):
+        raw = raw[3:]
+    if raw.endswith("```"):
+        raw = raw[:-3]
+    return raw.strip()
+
+
 def migrate(
     ir: dict[str, Any],
     analyzer_output: dict[str, Any],
@@ -146,11 +165,14 @@ def migrate(
     """
     Generate PySpark code from IR using fine-tuned LLM.
 
-    Tries primary (fine-tuned) model first.
-    Falls back to public HF model if primary fails.
+    Model priority:
+    1. Phi-3.5-mini fine-tuned (best, 57% benchmark pass rate)
+    2. Qwen2.5-Coder fine-tuned (fallback, 45% pass rate)
+    3. Qwen2.5-Coder base (public, always available)
+    4. Stub with TODO comment (last resort)
 
     Args:
-        ir: Unified IR dict
+        ir: Unified IR dict from parser
         analyzer_output: Output from Analyzer agent
         rag_context: Retrieved PySpark patterns from RAG
 
@@ -159,31 +181,33 @@ def migrate(
     """
     prompt = build_prompt(ir, analyzer_output, rag_context)
 
-    # Try primary model first
-    if HF_TOKEN:
-        code, success = call_hf_api(PRIMARY_MODEL, prompt)
-        if success and code.strip():
-            return {
-                "pyspark_code": code.strip(),
-                "raw_response": code,
-                "model_used": PRIMARY_MODEL,
-                "prompt_used": prompt,
-            }
+    if not HF_TOKEN:
+        return _stub_response(prompt, reason="HF_TOKEN not set")
 
-    # Fallback to public model
-    if HF_TOKEN:
-        code, success = call_hf_api(FALLBACK_MODEL, prompt)
+    # Try each model in priority order
+    for model, label in [
+        (PRIMARY_MODEL, "phi-3.5-mini-finetuned"),
+        (FALLBACK_MODEL_1, "qwen2.5-finetuned"),
+        (FALLBACK_MODEL_2, "qwen2.5-base"),
+    ]:
+        code, success = call_hf_api(model, prompt)
         if success and code.strip():
-            return {
-                "pyspark_code": code.strip(),
-                "raw_response": code,
-                "model_used": FALLBACK_MODEL,
-                "prompt_used": prompt,
-            }
+            cleaned = clean_output(code)
+            if len(cleaned) > 20:  # sanity check — reject empty/trivial outputs
+                return {
+                    "pyspark_code": cleaned,
+                    "raw_response": code,
+                    "model_used": model,
+                    "prompt_used": prompt,
+                }
 
-    # Last resort — return stub with prompt for debugging
+    return _stub_response(prompt, reason="All models failed or returned empty output")
+
+
+def _stub_response(prompt: str, reason: str = "") -> dict[str, Any]:
+    """Return a clearly-marked stub when all model calls fail."""
     stub = (
-        "# NOTE: LLM generation failed or HF_TOKEN not set\n"
+        f"# NOTE: LLM generation failed — {reason}\n"
         "# TODO: Manual migration required\n"
         "import pyspark.sql.functions as F\n"
         "from pyspark.sql import SparkSession\n\n"
