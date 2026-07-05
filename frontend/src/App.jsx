@@ -26,24 +26,7 @@ const C = {
   cyan: "#22D3EE",
 };
 
-const EXAMPLE = `CREATE OR REPLACE PROCEDURE process_customer_payments AS
-  CURSOR c_payments IS
-    SELECT c.id, c.email, c.pan_number,
-           SUM(p.amount) as total_paid,
-           RANK() OVER (ORDER BY SUM(p.amount) DESC) as payment_rank
-    FROM customers c
-    INNER JOIN payments p ON c.id = p.customer_id
-    WHERE p.status = 'completed'
-    GROUP BY c.id, c.email, c.pan_number;
-BEGIN
-  FOR rec IN c_payments LOOP
-    UPDATE customers SET payment_tier = 'premium'
-    WHERE id = rec.id AND rec.total_paid > 100000;
-  END LOOP;
-  COMMIT;
-EXCEPTION
-  WHEN OTHERS THEN ROLLBACK;
-END;`;
+const EXAMPLE = ``;
 
 const LANGS = [
   { v: "auto", l: "Auto-detect", icon: "◈" },
@@ -254,6 +237,7 @@ export default function App() {
         ::-webkit-scrollbar-track{background:transparent}
         ::-webkit-scrollbar-thumb{background:${C.border};border-radius:2px}
         textarea:focus,select:focus{outline:none}
+        textarea::placeholder{color:#3D4F72;font-family:'JetBrains Mono','Fira Code',monospace;font-size:12.5px;}
         .fadeIn{animation:fadeIn 0.4s ease both}
       `}</style>
 
@@ -393,6 +377,7 @@ export default function App() {
               </div>
               <textarea value={src} onChange={e => setSrc(e.target.value)}
                 spellCheck={false}
+                placeholder="Paste your SQL, HiveQL, PL/SQL, or Stored Procedure code here...!!!!"
                 style={{
                   width: "100%", minHeight: 420,
                   background: "transparent", border: "none",
