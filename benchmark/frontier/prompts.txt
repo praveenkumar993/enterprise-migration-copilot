@@ -1,0 +1,1830 @@
+======================================================================
+PROMPT 01 | language=sql | difficulty=medium
+======================================================================
+### Instruction:
+Convert the following SQL code to PySpark.
+Difficulty: medium
+
+### Input:
+SELECT c.customer_name, COUNT(o.order_id) AS order_count
+FROM customers c
+LEFT JOIN (
+    SELECT o.customer_id, o.order_date
+    FROM orders o
+    WHERE o.status = 'completed'
+) o ON c.customer_id = o.customer_id
+GROUP BY c.customer_name;
+
+### Response:
+
+
+======================================================================
+PROMPT 02 | language=sql | difficulty=expert
+======================================================================
+### Instruction:
+Convert the following SQL code to PySpark.
+Difficulty: expert
+
+### Input:
+WITH ranked_transactions AS (
+  SELECT 
+    customer_id,
+    transaction_id,
+    order_date,
+    amount,
+    ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY order_date DESC) AS rn,
+    SUM(amount) OVER (PARTITION BY customer_id ORDER BY order_date
+                      RANGE BETWEEN INTERVAL 30 DAY PRECEDING AND CURRENT ROW) AS rolling_30d
+  FROM transactions
+),
+customer_segments AS (
+  SELECT 
+    customer_id,
+    CASE WHEN rolling_30d > 1000 THEN 'high'
+           WHEN rolling_30d > 300 THEN 'medium'
+           ELSE 'low' END AS segment
+  FROM ranked_transactions WHERE rn = 1
+)
+SELECT 
+  s.segment, 
+  COUNT(DISTINCT t.customer_id) AS customers, 
+  SUM(t.amount) AS total
+FROM 
+  ranked_transactions r
+JOIN 
+  customer_segments s ON r.customer_id = s.customer_id
+GROUP BY 
+  s.segment
+HAVING 
+  SUM(t.amount) > 500
+ORDER BY 
+  total DESC;
+
+### Response:
+
+
+======================================================================
+PROMPT 03 | language=sql | difficulty=medium
+======================================================================
+### Instruction:
+Convert the following SQL code to PySpark.
+Difficulty: medium
+
+### Input:
+SELECT o.order_id, c.customer_name, o.total_amount,
+  SUM(o.quantity) AS total_quantity,
+  AVG(o.price) AS average_price,
+  MAX(o.date_ordered) AS last_order_date,
+  MIN(o.date_ordered) AS first_order_date
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+GROUP BY o.order_id, c.customer_name, o.total_amount;
+
+### Response:
+
+
+======================================================================
+PROMPT 04 | language=sql | difficulty=easy
+======================================================================
+### Instruction:
+Convert the following SQL code to PySpark.
+Difficulty: easy
+
+### Input:
+SELECT o.order_id, p.product_name, SUM(o.quantity * p.price) AS total_amount
+FROM orders o
+JOIN products p ON o.product_id = p.product_id
+WHERE o.order_date >= '2021-01-01'
+GROUP BY o.order_id, p.product_name
+ORDER BY total_amount DESC;
+
+### Response:
+
+
+======================================================================
+PROMPT 05 | language=sql | difficulty=easy
+======================================================================
+### Instruction:
+Convert the following SQL code to PySpark.
+Difficulty: easy
+
+### Input:
+SELECT customer_id, order_date, total_amount, (total_amount * 1.05) AS discounted_total FROM orders WHERE status = 'completed';
+
+### Response:
+
+
+======================================================================
+PROMPT 06 | language=sql | difficulty=hard
+======================================================================
+### Instruction:
+Convert the following SQL code to PySpark.
+Difficulty: hard
+
+### Input:
+SELECT o.OrderID, c.CustomerName, p.ProductName, o.Quantity,
+       SUM(o.Quantity) OVER (PARTITION BY c.CustomerID ORDER BY o.OrderDate) AS TotalQuantity
+FROM Orders o
+JOIN Customers c ON o.CustomerID = c.CustomerID
+JOIN Products p ON o.ProductID = p.ProductID
+WHERE o.OrderDate >= '2023-01-01' AND o.OrderDate < '2023-04-01'
+GROUP BY o.OrderID, c.CustomerName, p.ProductName, o.Quantity
+ORDER BY TotalQuantity DESC
+LIMIT 10;
+
+### Response:
+
+
+======================================================================
+PROMPT 07 | language=sql | difficulty=hard
+======================================================================
+### Instruction:
+Convert the following SQL code to PySpark.
+Difficulty: hard
+
+### Input:
+WITH RECURSIVE OrgHierarchy AS (
+    SELECT EmployeeID, ManagerID, FirstName, LastName, Department, 0 AS Level,
+           CAST(EmployeeID AS VARCHAR(500)) AS Path
+    FROM Employees
+    WHERE ManagerID IS NULL
+    UNION ALL
+    SELECT e.EmployeeID, e.ManagerID, e.FirstName, e.LastName, e.Department,
+           oh.Level + 1,
+           oh.Path + '->' + CAST(e.EmployeeID AS VARCHAR(10))
+    FROM Employees e
+    INNER JOIN OrgHierarchy oh ON e.ManagerID = oh.EmployeeID
+),
+DeptHeadcount AS (
+    SELECT Department, Level, COUNT(*) AS HeadCount,
+           AVG(Salary) AS AvgSalary
+    FROM OrgHierarchy
+    JOIN Employees USING (EmployeeID)
+    GROUP BY Department, Level
+)
+SELECT oh.EmployeeID, oh.FirstName, oh.LastName, oh.Department,
+       oh.Level, oh.Path,
+       dh.HeadCount, dh.AvgSalary,
+       SUM(e2.Salary) OVER (PARTITION BY oh.Department ORDER BY oh.Level) AS CumSalaryByLevel
+FROM OrgHierarchy oh
+JOIN Employees e2 ON oh.EmployeeID = e2.EmployeeID
+JOIN DeptHeadcount dh ON oh.Department = dh.Department AND oh.Level = dh.Level
+ORDER BY oh.Level, oh.Department;
+
+### Response:
+
+
+======================================================================
+PROMPT 08 | language=sql | difficulty=easy
+======================================================================
+### Instruction:
+Convert the following SQL code to PySpark.
+Difficulty: easy
+
+### Input:
+SELECT o.order_id, c.customer_name, p.product_name, SUM(o.quantity * p.price) AS total_amount
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+JOIN products p ON o.product_id = p.product_id
+GROUP BY o.order_id, c.customer_name, p.product_name
+ORDER BY total_amount DESC;
+
+### Response:
+
+
+======================================================================
+PROMPT 09 | language=sql | difficulty=easy
+======================================================================
+### Instruction:
+Convert the following SQL code to PySpark.
+Difficulty: easy
+
+### Input:
+SELECT o.order_id, o.customer_id, p.product_name, SUM(o.quantity) AS total_quantity
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+JOIN products p ON o.product_id = p.product_id
+WHERE c.country = 'USA' AND p.category = 'Electronics'
+GROUP BY o.order_id, o.customer_id, p.product_name;
+
+### Response:
+
+
+======================================================================
+PROMPT 10 | language=sql | difficulty=medium
+======================================================================
+### Instruction:
+Convert the following SQL code to PySpark.
+Difficulty: medium
+
+### Input:
+SELECT o.order_id, c.customer_name, p.product_name,
+  COUNT(o.order_id) AS order_count
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+JOIN products p ON o.product_id = p.product_id
+WHERE c.country = 'USA'
+GROUP BY o.order_id, c.customer_name, p.product_name;
+
+### Response:
+
+
+======================================================================
+PROMPT 11 | language=sql | difficulty=hard
+======================================================================
+### Instruction:
+Convert the following SQL code to PySpark.
+Difficulty: hard
+
+### Input:
+WITH ProductSales AS (
+    SELECT OrderID, CustomerID, ProductID, Quantity, Price,
+           YEAR(OrderDate) AS OrderYear
+    FROM Orders
+),
+ProductCategories AS (
+    SELECT CategoryID, CategoryName
+    FROM Categories
+),
+CustomerOrders AS (
+    SELECT CustomerID, COUNT(*) AS TotalOrders
+    FROM Productsales
+    GROUP BY CustomerID
+)
+SELECT p.CategoryName, c.TotalOrders,
+       SUM(p.Quantity * p.Price) AS Revenue,
+       RANK() OVER (PARTITION BY p.CategoryName ORDER BY Revenue DESC) AS CategoryRank
+FROM ProductSales ps
+JOIN ProductCategories pc ON ps.ProductID = pc.CategoryID
+JOIN CustomerOrders co ON ps.CustomerID = co.CustomerID
+GROUP BY p.CategoryName, c.TotalOrders
+ORDER BY CategoryName, Revenue DESC;
+
+### Response:
+
+
+======================================================================
+PROMPT 12 | language=sql | difficulty=medium
+======================================================================
+### Instruction:
+Convert the following SQL code to PySpark.
+Difficulty: medium
+
+### Input:
+SELECT
+    p.Category,
+    COUNT(p.ProductID) AS ProductCount,
+    SUM(i.QuantityOnHand) AS TotalStock,
+    AVG(p.UnitPrice) AS AvgListPrice,
+    SUM(CASE WHEN i.QuantityOnHand < i.ReorderLevel THEN 1 ELSE 0 END) AS LowStockCount
+FROM Products p
+INNER JOIN Suppliers s ON p.SupplierID = s.SupplierID
+INNER JOIN Inventory i ON p.ProductID = i.ProductID
+WHERE p.Category = 'Electronics'
+GROUP BY p.Category, p.SubCategory, s.SupplierName
+HAVING SUM(i.QuantityOnHand * p.UnitCost) > 10000
+ORDER BY p.Category, TotalInventoryValue DESC;
+
+### Response:
+
+
+======================================================================
+PROMPT 13 | language=sql | difficulty=hard
+======================================================================
+### Instruction:
+Convert the following SQL code to PySpark.
+Difficulty: hard
+
+### Input:
+WITH SalesByProduct AS (
+    SELECT 
+        p.ProductID,
+        SUM(od.Quantity) AS TotalSales
+    FROM 
+        Products p
+    JOIN 
+        OrderDetails od ON p.ProductID = od.ProductID
+    GROUP BY 
+        p.ProductID
+),
+TopSellingProducts AS (
+    SELECT 
+        sp.ProductID, sp.TotalSales, 
+        ROW_NUMBER() OVER (ORDER BY sp.TotalSales DESC) AS SalesRank
+    FROM 
+        SalesByProduct sp
+)
+SELECT 
+    p.ProductName, sp.TotalSales, sp.SalesRank
+FROM 
+    Products p
+JOIN 
+    TopSellingProducts tsp ON p.ProductID = tsp.ProductID
+WHERE 
+    tsp.SalesRank <= 5;
+
+### Response:
+
+
+======================================================================
+PROMPT 14 | language=sql | difficulty=expert
+======================================================================
+### Instruction:
+Convert the following SQL code to PySpark.
+Difficulty: expert
+
+### Input:
+WITH customer_orders AS (
+  SELECT o.customer_id, o.order_date,
+         CASE WHEN o.status = 'completed' THEN 1 ELSE 0 END AS order_status
+  FROM orders o
+),
+customer_activity AS (
+  SELECT ca.user_id, ca.activity_date,
+         CASE WHEN ca.action = 'purchase' THEN 1 ELSE 0 END AS activity_status
+  FROM customer_activity ca
+)
+SELECT c.customer_name, SUM(co.order_status) AS total_orders,
+       COUNT(ca.activity_status) AS total_activities
+FROM customers c
+JOIN customer_orders co ON c.customer_id = co.customer_id
+JOIN customer_activity ca ON c.customer_id = ca.user_id
+GROUP BY c.customer_name;
+
+### Response:
+
+
+======================================================================
+PROMPT 15 | language=sql | difficulty=hard
+======================================================================
+### Instruction:
+Convert the following SQL code to PySpark.
+Difficulty: hard
+
+### Input:
+-- Step 1: Create a sample table for demonstration purposes
+CREATE TABLE customers (
+    customer_id INT PRIMARY KEY,
+    first_name STRING,
+    last_name STRING
+);
+
+CREATE TABLE orders (
+    order_id INT PRIMARY KEY,
+    customer_id INT,
+    order_date DATE,
+    product_id INT
+);
+
+CREATE TABLE products (
+    product_id INT PRIMARY KEY,
+    name STRING,
+    price DECIMAL(10, 2)
+);
+
+-- Step 2: Insert sample data into the tables
+INSERT INTO customers (customer_id, first_name, last_name) VALUES (1, 'John', 'Doe');
+INSERT INTO orders (order_id, customer_id, order_date, product_id) VALUES (101, 1, '2023-01-01', 1);
+INSERT INTO orders (order_id, customer_id, order_date, product_id) VALUES (102, 1, '2023-01-02', 1);
+INSERT INTO products (product_id, name, price) VALUES (1, 'Product A', 10.0);
+
+-- Step 3: Create a subquery to filter orders based on customer ID and date range
+WITH filtered_orders AS (
+    SELECT o.order_id, c.customer_id, o.order_date, p.name, p.price
+    FROM customers c
+    JOIN orders o ON c.customer_id = o.customer_id
+    JOIN products p ON o.product_id = p.product_id
+    WHERE o.order_date BETWEEN '2023-01-01' AND '2023-01-15'
+)
+
+-- Step 4: Perform a cross join between customers and orders
+SELECT c.customer_id, c.first_name, c.last_name, o.order_id, o.order_date, p.name, p.price
+FROM customers c
+CROSS JOIN filtered_orders o;
+
+### Response:
+
+
+======================================================================
+PROMPT 16 | language=hiveql | difficulty=medium
+======================================================================
+### Instruction:
+Convert the following HIVEQL code to PySpark.
+Difficulty: medium
+
+### Input:
+SELECT e.name, d.department_name
+FROM employees e
+LEFT OUTER JOIN departments d ON e.department_id = d.department_id;
+
+### Response:
+
+
+======================================================================
+PROMPT 17 | language=hiveql | difficulty=medium
+======================================================================
+### Instruction:
+Convert the following HIVEQL code to PySpark.
+Difficulty: medium
+
+### Input:
+SELECT o.order_id,
+  o.customer_id,
+  o.product_id,
+  o.quantity,
+  o.shipping_date,
+  c.first_name,
+  c.last_name,
+  p.product_name
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+JOIN products p ON o.product_id = p.product_id
+DISTRIBUTE BY o.order_id, c.customer_id, p.product_id
+SORT BY o.shipping_date DESC, p.product_name ASC
+CLUSTER BY o.order_id, c.customer_id, p.product_id
+
+### Response:
+
+
+======================================================================
+PROMPT 18 | language=hiveql | difficulty=expert
+======================================================================
+### Instruction:
+Convert the following HIVEQL code to PySpark.
+Difficulty: expert
+
+### Input:
+SELECT region, product_id, sales_month, sales,
+       sales - AVG(sales) OVER (PARTITION BY region, product_id) AS dev_from_avg,
+       STDDEV_POP(sales) OVER (PARTITION BY region, product_id) AS std_dev,
+       (sales - AVG(sales) OVER (PARTITION BY region, product_id)) /
+         NULLIF(STDDEV_POP(sales) OVER (PARTITION BY region, product_id), 0) AS z_score
+FROM regional_sales
+WHERE sales_month BETWEEN '2023-01' AND '2023-12'
+DISTRIBUTE BY region
+SORT BY region, product_id
+CLUSTER BY region;
+
+### Response:
+
+
+======================================================================
+PROMPT 19 | language=hiveql | difficulty=expert
+======================================================================
+### Instruction:
+Convert the following HIVEQL code to PySpark.
+Difficulty: expert
+
+### Input:
+SELECT o.order_id, c.customer_name,
+       p.product_name, o.quantity, o.price,
+       RANK() OVER (PARTITION BY o.customer_id ORDER BY o.total_amount DESC) AS order_rank
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+JOIN (
+  SELECT customer_id, DATE_FORMAT(o.order_date, 'EEEE') AS day_of_week,
+         SUM(quantity * price) AS total_amount
+  FROM orders
+  JOIN products p ON o.product_id = p.product_id
+  GROUP BY customer_id, DATE_FORMAT(o.order_date, 'EEEE')
+) d
+ON o.customer_id = d.customer_id
+WHERE o.active = TRUE
+DISTRIBUTE BY c.customer_id
+SORT BY order_rank;
+
+### Response:
+
+
+======================================================================
+PROMPT 20 | language=hiveql | difficulty=expert
+======================================================================
+### Instruction:
+Convert the following HIVEQL code to PySpark.
+Difficulty: expert
+
+### Input:
+-- Create a partitioned table for demonstration purposes
+CREATE TABLE orders (
+    order_id INT,
+    customer_id INT,
+    product_id INT,
+    quantity INT,
+    order_date DATE
+)
+PARTITIONED BY (year(order_date) AS year, month(order_date) AS month);
+
+-- Sample data insertion into the partitioned table
+INSERT INTO orders VALUES
+(101, 1, 1001, 5, '2023-04-15'),
+(102, 2, 1002, 3, '2023-04-16'),
+(103, 1, 1001, 7, '2023-04-17');
+
+-- HiveQL query to demonstrate LATERAL VIEW EXPLODE and CLUSTER BY
+SELECT o.order_id,
+       o.customer_id,
+       o.product_id,
+       o.quantity,
+       o.order_date,
+       c.customer_name,
+       p.product_name,
+       F.explode(o.items) AS item_details
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+JOIN products p ON o.product_id = p.product_id
+LATERAL VIEW EXPLODE(o.items) i
+CLUSTER BY o.order_id, o.customer_id, o.product_id;
+
+### Response:
+
+
+======================================================================
+PROMPT 21 | language=hiveql | difficulty=easy
+======================================================================
+### Instruction:
+Convert the following HIVEQL code to PySpark.
+Difficulty: easy
+
+### Input:
+SELECT o.order_id, c.customer_name, p.product_name
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+JOIN products p ON o.product_id = p.product_id
+WHERE o.status = 'Shipped'
+ORDER BY o.order_date DESC;
+
+### Response:
+
+
+======================================================================
+PROMPT 22 | language=hiveql | difficulty=medium
+======================================================================
+### Instruction:
+Convert the following HIVEQL code to PySpark.
+Difficulty: medium
+
+### Input:
+SELECT o.order_id, o.customer_id, p.product_name
+FROM orders o
+INNER JOIN customers c ON o.customer_id = c.customer_id
+INNER JOIN products p ON o.product_id = p.product_id
+WHERE o.order_date > '2021-01-01'
+DISTRIBUTE BY o.order_date, o.customer_id
+SORT BY o.order_date DESC, o.customer_id ASC
+CLUSTER BY o.order_date, o.customer_id
+PARTITIONED BY (o.order_date, o.customer_id)
+
+### Response:
+
+
+======================================================================
+PROMPT 23 | language=hiveql | difficulty=hard
+======================================================================
+### Instruction:
+Convert the following HIVEQL code to PySpark.
+Difficulty: hard
+
+### Input:
+SELECT o.order_id, c.customer_id, p.product_id, t.transaction_date
+FROM orders o
+LATERAL VIEW OUTER EXPLODE(o.items) i AS item
+JOIN customers c ON i.customer_id = c.customer_id
+JOIN products p ON i.product_id = p.product_id
+WHERE o.status = 'completed'
+DISTRIBUTE BY o.order_id, c.customer_id, p.product_id;
+
+### Response:
+
+
+======================================================================
+PROMPT 24 | language=hiveql | difficulty=hard
+======================================================================
+### Instruction:
+Convert the following HIVEQL code to PySpark.
+Difficulty: hard
+
+### Input:
+INSERT OVERWRITE TABLE sales_summary PARTITION (year, month)
+SELECT 
+    product_id,
+    SUM(amount) AS total_amount,
+    year,
+    month
+FROM (
+    SELECT 
+        order_id,
+        customer_id,
+        product_id,
+        amount,
+        order_date
+    FROM orders
+    WHERE order_date >= '2024-01-01'
+)
+LATERAL VIEW EXPLODE (product_id) AS exploded_product_id, exploded_amount
+GROUP BY 
+    exploded_product_id, year, month
+ORDER BY 
+    exploded_product_id;
+
+### Response:
+
+
+======================================================================
+PROMPT 25 | language=hiveql | difficulty=medium
+======================================================================
+### Instruction:
+Convert the following HIVEQL code to PySpark.
+Difficulty: medium
+
+### Input:
+SELECT r.route_id, r.origin_port, r.destination_port,
+       COUNT(s.shipment_id) AS shipment_count,
+       SUM(s.cargo_weight_tons) AS total_cargo,
+       ROUND(AVG(s.transit_days), 1) AS avg_transit_days,
+       SUM(s.cargo_weight_tons * s.freight_rate_per_ton) AS total_revenue
+FROM shipping_routes r
+JOIN cargo_shipments s ON r.route_id = s.route_id
+WHERE s.departure_date BETWEEN '2024-01-01' AND '2024-06-30'
+GROUP BY r.route_id, r.origin_port, r.destination_port
+HAVING COUNT(s.shipment_id) >= 10
+ORDER BY total_revenue DESC
+LIMIT 25;
+
+### Response:
+
+
+======================================================================
+PROMPT 26 | language=hiveql | difficulty=medium
+======================================================================
+### Instruction:
+Convert the following HIVEQL code to PySpark.
+Difficulty: medium
+
+### Input:
+SELECT e.name,
+  e.salary,
+  e.department,
+  e.orders,
+  e.orders.amount AS order_amount,
+  e.orders.quantity AS order_quantity
+FROM employees e
+JOIN LATERAL VIEW EXPLODE(e.orders) o ON TRUE
+WHERE o.order_date > '2023-01-01'
+ORDER BY e.department, o.order_date DESC;
+
+### Response:
+
+
+======================================================================
+PROMPT 27 | language=hiveql | difficulty=medium
+======================================================================
+### Instruction:
+Convert the following HIVEQL code to PySpark.
+Difficulty: medium
+
+### Input:
+SELECT
+    o.order_id,
+    c.customer_name,
+    p.product_name,
+    s.quantity,
+    o.order_date
+FROM orders o
+JOIN customers c ON o.customer_id = c.customer_id
+JOIN (
+    SELECT
+        order_id,
+        product_id,
+        quantity
+    FROM sales
+) s ON o.order_id = s.order_id
+DISTRIBUTE BY o.order_id, c.customer_name, p.product_name, s.quantity
+SORT BY o.order_date DESC
+CLUSTER BY o.order_id, c.customer_name, p.product_name, s.quantity
+LIMIT 20;
+
+### Response:
+
+
+======================================================================
+PROMPT 28 | language=hiveql | difficulty=easy
+======================================================================
+### Instruction:
+Convert the following HIVEQL code to PySpark.
+Difficulty: easy
+
+### Input:
+SELECT o.order_id, o.customer_id, p.product_name FROM orders o LATERAL VIEW EXPLODE(o.items) i AS (item_id, quantity) JOIN products p ON i.item_id = p.product_id ORDER BY o.order_date DESC;
+
+### Response:
+
+
+======================================================================
+PROMPT 29 | language=hiveql | difficulty=hard
+======================================================================
+### Instruction:
+Convert the following HIVEQL code to PySpark.
+Difficulty: hard
+
+### Input:
+SELECT customer_id, order_date, product_name, price,
+       SUM(price) OVER (PARTITION BY customer_id ORDER BY order_date
+                         ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS total_spent
+FROM orders
+WHERE order_date >= '2023-01-01'
+DISTRIBUTE BY customer_id
+SORT BY customer_id, product_name;
+
+### Response:
+
+
+======================================================================
+PROMPT 30 | language=hiveql | difficulty=medium
+======================================================================
+### Instruction:
+Convert the following HIVEQL code to PySpark.
+Difficulty: medium
+
+### Input:
+-- Order by customer_id and tag in descending order
+SELECT 
+    o.customer_id,
+    o.tag,
+    SUM(o.amount) AS total_amount
+FROM 
+    orders o
+LATERAL VIEW EXPLODE(SPLIT(o.tags, ',')) t AS tag
+WHERE 
+    o.order_date >= '2023-01-01'
+GROUP BY 
+    o.customer_id, t.tag
+ORDER BY 
+    total_amount DESC;
+
+### Response:
+
+
+======================================================================
+PROMPT 31 | language=plsql | difficulty=hard
+======================================================================
+### Instruction:
+Convert the following PLSQL code to PySpark.
+Difficulty: hard
+
+### Input:
+DECLARE
+  TYPE dept_salary_rec IS RECORD (
+    department_id   NUMBER,
+    total_salary    NUMBER,
+    avg_salary      NUMBER,
+    headcount       NUMBER
+  );
+  TYPE dept_salary_tab IS TABLE OF dept_salary_rec INDEX BY PLS_INTEGER;
+  v_dept_stats dept_salary_tab;
+  i PLS_INTEGER := 1;
+BEGIN
+  DECLARE
+    CURSOR cur_emp IS
+      SELECT department_id, salary FROM employees;
+    v_employee dept_salary_rec;
+  BEGIN
+    FOR rec IN cur_emp LOOP
+      v_dept_stats(i).department_id := rec.department_id;
+      v_dept_stats(i).total_salary  := rec.total_salary;
+      v_dept_stats(i).avg_salary    := rec.avg_salary;
+      v_dept_stats(i).headcount     := rec.headcount;
+      i := i + 1;
+    END LOOP;
+
+    FOR j IN 1 .. v_dept_stats.COUNT LOOP
+      DBMS_OUTPUT.PUT_LINE('Dept: ' || v_dept_stats(j).department_id
+        || ' Avg: ' || ROUND(v_dept_stats(j).avg_salary, 2));
+    END LOOP;
+
+    -- Exception handling
+    BEGIN
+      -- Simulate an exception
+      SELECT * FROM non_existent_table;
+    EXCEPTION
+      WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('An error occurred: ' || SQLERRM);
+    END;
+  END;
+END;
+
+### Response:
+
+
+======================================================================
+PROMPT 32 | language=plsql | difficulty=hard
+======================================================================
+### Instruction:
+Convert the following PLSQL code to PySpark.
+Difficulty: hard
+
+### Input:
+CREATE OR REPLACE PROCEDURE merge_employee_updates(
+  p_staging_table IN VARCHAR2
+) AS
+BEGIN
+  MERGE INTO employees tgt
+  USING (SELECT * FROM staging_employees) src
+  ON (tgt.emp_id = src.emp_id)
+  WHEN MATCHED THEN
+    UPDATE SET tgt.salary      = src.salary,
+               tgt.job_id      = src.job_id,
+               tgt.modified_dt = SYSDATE
+  WHEN NOT MATCHED THEN
+    INSERT (emp_id, first_name, last_name, salary, job_id, hire_date)
+    VALUES (src.emp_id, src.first_name, src.last_name,
+            src.salary, src.job_id, src.hire_date);
+  COMMIT;
+END merge_employee_updates;
+
+### Response:
+
+
+======================================================================
+PROMPT 33 | language=plsql | difficulty=hard
+======================================================================
+### Instruction:
+Convert the following PLSQL code to PySpark.
+Difficulty: hard
+
+### Input:
+CREATE OR REPLACE PROCEDURE get_department_stats AS
+  TYPE dept_salary_rec IS RECORD (
+    department_id   NUMBER,
+    total_salary    NUMBER,
+    avg_salary      NUMBER,
+    headcount       NUMBER
+  );
+  TYPE dept_salary_tab IS TABLE OF dept_salary_rec INDEX BY PLS_INTEGER;
+  v_dept_stats dept_salary_tab;
+  i PLS_INTEGER := 1;
+
+BEGIN
+  -- Open a cursor to fetch department statistics
+  OPEN c_dept_stats FOR
+    SELECT department_id,
+           SUM(salary) AS total_salary,
+           AVG(salary) AS avg_salary,
+           COUNT(*) AS headcount
+    FROM employees
+    GROUP BY department_id;
+
+  -- Fetch data into the table variable using BULK COLLECT
+  LOOP
+    FETCH c_dept_stats BULK COLLECT INTO v_dept_stats;
+    EXIT WHEN v_dept_stats.COUNT = 0;
+    FOR j IN 1 .. v_dept_stats.COUNT LOOP
+      v_dept_stats(j).department_id := rec.department_id;
+      v_dept_stats(j).total_salary  := rec.total_salary;
+      v_dept_stats(j).avg_salary    := rec.avg_salary;
+      v_dept_stats(j).headcount     := rec.headcount;
+    END LOOP;
+    i := i + v_dept_stats.COUNT;
+  END LOOP;
+
+  -- Close the cursor
+  CLOSE c_dept_stats;
+
+  -- Handle any exceptions that occur during the procedure execution
+  BEGIN
+    FOR rec IN (
+      SELECT department_id,
+             SUM(salary) AS total_salary,
+             AVG(salary) AS avg_salary,
+             COUNT(*) AS headcount
+      FROM employees
+      GROUP BY department_id
+    ) LOOP
+      v_dept_stats(i).department_id := rec.department_id;
+      v_dept_stats(i).total_salary  := rec.total_salary;
+      v_dept_stats(i).avg_salary    := rec.avg_salary;
+      v_dept_stats(i).headcount     := rec.headcount;
+      i := i + 1;
+    END LOOP;
+  EXCEPTION
+    WHEN OTHERS THEN
+      DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+  END;
+
+  -- Output the department statistics using DBMS_OUTPUT
+  FOR j IN 1 .. v_dept_stats.COUNT LOOP
+    DBMS_OUTPUT.PUT_LINE('Dept: ' || v_dept_stats(j).department_id
+      || ' Avg: ' || ROUND(v_dept_stats(j).avg_salary, 2));
+  END LOOP;
+END get_department_stats;
+/
+
+### Response:
+
+
+======================================================================
+PROMPT 34 | language=plsql | difficulty=hard
+======================================================================
+### Instruction:
+Convert the following PLSQL code to PySpark.
+Difficulty: hard
+
+### Input:
+DECLARE
+  TYPE emp_id_list IS TABLE OF employees.emp_id%TYPE;
+  v_ids   emp_id_list;
+  v_limit PLS_INTEGER := 100;
+  CURSOR c IS SELECT emp_id FROM employees WHERE status = 'INACTIVE';
+BEGIN
+  OPEN c;
+  LOOP
+    FETCH c BULK COLLECT INTO v_ids LIMIT v_limit;
+    EXIT WHEN v_ids.COUNT = 0;
+    FORALL i IN 1 .. v_ids.COUNT
+      DELETE FROM employees WHERE emp_id = v_ids(i);
+    COMMIT;
+  END LOOP;
+  CLOSE c;
+
+  -- Example of using DBMS_OUTPUT in PL/SQL to log messages
+  DECLARE
+    l_msg VARCHAR2(255) := 'Data migration completed successfully';
+  BEGIN
+    DBMS_OUTPUT.PUT_LINE(l_msg);
+  END;
+
+  -- Example of storing a procedure in PL/SQL
+  CREATE OR REPLACE PROCEDURE mark_inactive_employees AS
+  BEGIN
+    UPDATE employees SET status = 'INACTIVE' WHERE status = 'ACTIVE';
+  END;
+END;
+
+### Response:
+
+
+======================================================================
+PROMPT 35 | language=plsql | difficulty=hard
+======================================================================
+### Instruction:
+Convert the following PLSQL code to PySpark.
+Difficulty: hard
+
+### Input:
+DECLARE
+  TYPE emp_table_type IS TABLE OF employees%ROWTYPE
+    INDEX BY PLS_INTEGER;
+  v_employees emp_table_type;
+BEGIN
+  SELECT *
+  BULK COLLECT INTO v_employees
+  FROM employees
+  WHERE department_id = 20;
+
+  FOR i IN 1 .. v_employees.COUNT LOOP
+    UPDATE employees
+    SET salary = v_employees(i).salary * 1.10
+    WHERE emp_id = v_employees(i).emp_id;
+  END LOOP;
+  COMMIT;
+END;
+
+### Response:
+
+
+======================================================================
+PROMPT 36 | language=plsql | difficulty=expert
+======================================================================
+### Instruction:
+Convert the following PLSQL code to PySpark.
+Difficulty: expert
+
+### Input:
+CREATE OR REPLACE PROCEDURE run_fraud_detection_sweep(
+  p_detection_date DATE,
+  p_sensitivity     VARCHAR2 DEFAULT 'medium'
+) AS
+  v_velocity_limit  NUMBER;
+  v_amount_limit    NUMBER;
+  v_rule_version    VARCHAR2(20);
+  TYPE t_txn_rec IS RECORD (
+    account_id   NUMBER,
+    txn_count    NUMBER,
+    total_amount NUMBER,
+    max_single   NUMBER
+  );
+  TYPE t_txn_tab IS TABLE OF t_txn_rec;
+  v_suspicious t_txn_tab;
+  v_case_id    NUMBER;
+BEGIN
+  SELECT velocity_limit, amount_limit, rule_version
+  INTO v_velocity_limit, v_amount_limit, v_rule_version
+  FROM fraud_detection_rules
+  WHERE sensitivity = p_sensitivity AND active_flag = 'Y'
+  AND ROWNUM = 1
+  ORDER BY created_at DESC;
+
+  SELECT account_id, COUNT(*), SUM(txn_amount), MAX(txn_amount)
+  BULK COLLECT INTO v_suspicious
+  FROM payment_transactions
+  WHERE txn_date = p_detection_date AND flagged = 'N'
+  GROUP BY account_id
+  HAVING COUNT(*) > v_velocity_limit OR MAX(txn_amount) > v_amount_limit;
+
+  SELECT NVL(MAX(case_id),0)+1 INTO v_case_id FROM fraud_cases;
+
+  FORALL i IN 1..v_suspicious.COUNT
+    INSERT INTO fraud_cases
+      (case_id, account_id, detection_date, txn_count,
+       total_amount, max_single_txn, sensitivity, rule_version,
+       case_status, opened_at)
+    VALUES
+      (v_case_id + i - 1, v_suspicious(i).account_id, p_detection_date,
+       v_suspicious(i).txn_count, v_suspicious(i).total_amount,
+       v_suspicious(i).max_single, p_sensitivity, v_rule_version,
+       'open', SYSDATE);
+
+  FORALL i IN 1..v_suspicious.COUNT
+    UPDATE payment_transactions
+    SET flagged = 'Y', fraud_case_ref = v_case_id + i - 1
+    WHERE account_id = v_suspicious(i).account_id
+    AND txn_date     = p_detection_date;
+
+  INSERT INTO fraud_sweep_log
+    (detection_date, sensitivity, rule_version, cases_opened, run_at)
+  VALUES (p_detection_date, p_sensitivity, v_rule_version, v_suspicious.COUNT, SYSDATE);
+  COMMIT;
+EXCEPTION
+  WHEN NO_DATA_FOUND THEN
+    INSERT INTO fraud_sweep_log
+      (detection_date, sensitivity, rule_version, cases_opened, error_msg, run_at)
+    VALUES (p_detection_date, p_sensitivity, NULL, 0, 'No active rule found', SYSDATE);
+    COMMIT;
+END;
+
+### Response:
+
+
+======================================================================
+PROMPT 37 | language=plsql | difficulty=medium
+======================================================================
+### Instruction:
+Convert the following PLSQL code to PySpark.
+Difficulty: medium
+
+### Input:
+DECLARE
+    CURSOR emp_cursor IS
+        SELECT first_name, last_name, salary FROM employees WHERE salary > 6000;
+    
+    TYPE emp_type IS TABLE OF employees%ROWTYPE;
+    emp_tab emp_type := emp_type();
+BEGIN
+    OPEN emp_cursor;
+    LOOP
+        FETCH emp_cursor BULK COLLECT INTO emp_tab LIMIT 100;
+        FOR i IN 1..emp_tab.COUNT LOOP
+            DBMS_OUTPUT.PUT_LINE('Employee: ' || emp_tab(i).first_name || ' ' || emp_tab(i).last_name);
+        END LOOP;
+    EXIT WHEN emp_cursor%NOTFOUND;
+    CLOSE emp_cursor;
+END;
+/
+
+### Response:
+
+
+======================================================================
+PROMPT 38 | language=plsql | difficulty=medium
+======================================================================
+### Instruction:
+Convert the following PLSQL code to PySpark.
+Difficulty: medium
+
+### Input:
+CREATE OR REPLACE PROCEDURE get_department_salaries(
+    p_dept_id IN NUMBER,
+    p_it_payroll OUT NUMBER,
+    p_sales_payroll OUT NUMBER,
+    p_total_payroll OUT NUMBER
+) IS
+BEGIN
+    DECLARE
+        CURSOR c_employees IS
+            SELECT salary, job_id
+            FROM employees
+            WHERE department_id = p_dept_id;
+
+        v_salary NUMBER;
+        v_job_id VARCHAR2(10);
+        v_it_payroll NUMBER := 0;
+        v_sales_payroll NUMBER := 0;
+        v_total_payroll NUMBER := 0;
+    BEGIN
+        OPEN c_employees;
+        LOOP
+            FETCH c_employees INTO v_salary, v_job_id;
+            EXIT WHEN c_employees%NOTFOUND;
+
+            IF v_job_id = 'IT_PROG' THEN
+                v_it_payroll := v_it_payroll + v_salary;
+            ELSIF v_job_id = 'SA_REP' THEN
+                v_sales_payroll := v_sales_payroll + v_salary;
+            END IF;
+        END LOOP;
+        CLOSE c_employees;
+
+        p_it_payroll := v_it_payroll;
+        p_sales_payroll := v_sales_payroll;
+        p_total_payroll := v_it_payroll + v_sales_payroll;
+    EXCEPTION
+        WHEN OTHERS THEN
+            DBMS_OUTPUT.PUT_LINE('An error occurred: ' || SQLERRM);
+    END;
+END get_department_salaries;
+/
+
+### Response:
+
+
+======================================================================
+PROMPT 39 | language=plsql | difficulty=medium
+======================================================================
+### Instruction:
+Convert the following PLSQL code to PySpark.
+Difficulty: medium
+
+### Input:
+DECLARE
+    TYPE category_path_table IS TABLE OF VARCHAR2(4000);
+    v_category_id NUMBER := 1;
+    v_category_path category_path_table;
+BEGIN
+    -- Open a cursor to fetch categories recursively
+    FOR rec IN (
+        SELECT category_name, parent_category_id
+        FROM product_categories
+        WHERE category_id = v_category_id
+    ) LOOP
+        -- Append the current category name to the path
+        v_category_path.EXTEND;
+        v_category_path(v_category_path.COUNT) := rec.category_name;
+
+        -- Check if the depth exceeds 10 and exit if true
+        IF v_category_path.COUNT > 10 THEN
+            EXIT;
+        END IF;
+
+        -- Recursively fetch parent categories
+        FOR rec_parent IN (
+            SELECT category_id, category_name, parent_category_id
+            FROM product_categories
+            WHERE category_id = rec.parent_category_id
+        ) LOOP
+            -- Append the current parent category name to the path
+            v_category_path.EXTEND;
+            v_category_path(v_category_path.COUNT) := rec_parent.category_name;
+
+            -- Check if the depth exceeds 10 and exit if true
+            IF v_category_path.COUNT > 10 THEN
+                EXIT;
+            END IF;
+
+            -- Fetch grandparent categories recursively
+            FOR rec_grandparent IN (
+                SELECT category_id, category_name, parent_category_id
+                FROM product_categories
+                WHERE category_id = rec_parent.parent_category_id
+            ) LOOP
+                -- Append the current grandparent category name to the path
+                v_category_path.EXTEND;
+                v_category_path(v_category_path.COUNT) := rec_grandparent.category_name;
+
+                -- Check if the depth exceeds 10 and exit if true
+                IF v_category_path.COUNT > 10 THEN
+                    EXIT;
+                END IF;
+
+                -- Fetch great-grandparent categories recursively
+                FOR rec_greatgrandparent IN (
+                    SELECT category_id, category_name, parent_category_id
+                    FROM product_categories
+                    WHERE category_id = rec_grandparent.parent_category_id
+                ) LOOP
+                    -- Append the current great-grandparent category name to the path
+                    v_category_path.EXTEND;
+                    v_category_path(v_category_path.COUNT) := rec_greatgrandparent.category_name;
+
+                    -- Check if the depth exceeds 10 and exit if true
+                    IF v_category_path.COUNT > 10 THEN
+                        EXIT;
+                    END IF;
+                END LOOP;
+            END LOOP;
+        END LOOP;
+    END LOOP;
+
+    -- Output the category path to DBMS_OUTPUT
+    FOR i IN 1..v_category_path.COUNT LOOP
+        DBMS_OUTPUT.PUT_LINE(v_category_path(i));
+    END LOOP;
+END get_product_category_path;
+/
+
+### Response:
+
+
+======================================================================
+PROMPT 40 | language=plsql | difficulty=expert
+======================================================================
+### Instruction:
+Convert the following PLSQL code to PySpark.
+Difficulty: expert
+
+### Input:
+-- Create a stored procedure to log changes in an Oracle database
+CREATE OR REPLACE PROCEDURE log_employee_change(
+  p_employee_id IN NUMBER,
+  p_operation  IN VARCHAR2,
+  p_old_name    IN VARCHAR2 DEFAULT NULL,
+  p_new_name    IN VARCHAR2 DEFAULT NULL
+) AS
+BEGIN
+  -- Start a new transaction
+  EXECUTE IMMEDIATE 'BEGIN DBMS_OUTPUT.PUT_LINE(''Starting transaction''); END;';
+
+  BEGIN
+    -- Perform the update operation in the database
+    UPDATE employees
+    SET name = p_new_name
+    WHERE employee_id = p_employee_id;
+
+    -- Commit the transaction if everything is successful
+    EXECUTE IMMEDIATE 'BEGIN DBMS_OUTPUT.PUT_LINE(''Transaction committed''); END;';
+  EXCEPTION
+    WHEN OTHERS THEN
+      -- Rollback the transaction in case of an error
+      EXECUTE IMMEDIATE 'BEGIN DBMS_OUTPUT.PUT_LINE(''Transaction rolled back''); END;';
+      RAISE;
+  END;
+
+  -- Output a message to indicate that the operation is complete
+  EXECUTE IMMEDIATE 'BEGIN DBMS_OUTPUT.PUT_LINE(''Operation completed''); END;';
+END log_employee_change;
+/
+
+### Response:
+
+
+======================================================================
+PROMPT 41 | language=stored_procedure | difficulty=medium
+======================================================================
+### Instruction:
+Convert the following STORED_PROCEDURE code to PySpark.
+Difficulty: medium
+
+### Input:
+CREATE PROCEDURE GetCustomerOrderSummary
+AS
+BEGIN
+    -- Create a temporary table to hold customer orders
+    CREATE TABLE #CustomerOrders (
+        CustomerID INT,
+        OrderID INT,
+        TotalAmount DECIMAL(10, 2)
+    );
+
+    BEGIN TRY
+        -- Merge the orders with customer details into the temporary table
+        MERGE INTO #CustomerOrders co
+        USING (
+            SELECT e.CustomerID, o.OrderID, o.TotalAmount
+            FROM Employees e
+            LEFT JOIN Orders o ON e.EmployeeID = o.EmployeeID
+        ) od
+        ON co.CustomerID = od.CustomerID AND co.OrderID = od.OrderID
+
+        WHEN NOT MATCHED THEN
+            INSERT (CustomerID, OrderID, TotalAmount)
+            VALUES (od.CustomerID, od.OrderID, od.TotalAmount);
+
+        -- Calculate the total revenue for each customer
+        SELECT c.CustomerID, c.FirstName, c.LastName,
+               COUNT(o.OrderID) AS TotalOrders,
+               SUM(od.TotalAmount) AS TotalRevenue
+        FROM Customers c
+        INNER JOIN #CustomerOrders co ON c.CustomerID = co.CustomerID
+        GROUP BY c.CustomerID, c.FirstName, c.LastName;
+
+    END TRY
+    BEGIN CATCH
+        -- Handle any errors that occur during the process
+        DECLARE @ErrorMessage NVARCHAR(MAX);
+        SET @ErrorMessage = ERROR_MESSAGE();
+        RAISERROR('An error occurred: %s', 16, 1, @ErrorMessage) WITH NOWAIT;
+    END CATCH
+
+END
+
+### Response:
+
+
+======================================================================
+PROMPT 42 | language=stored_procedure | difficulty=expert
+======================================================================
+### Instruction:
+Convert the following STORED_PROCEDURE code to PySpark.
+Difficulty: expert
+
+### Input:
+CREATE PROCEDURE usp_TemporalDataReconstructWithMergeAndCursors
+    @EntityId INT,
+    @AsOfDate DATETIME,
+    @EntityType NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Create a temporary table to store the most recent values for each field
+    CREATE TABLE #TemporalData (
+        EntityId INT,
+        FieldName NVARCHAR(50),
+        OldValue NVARCHAR(MAX),
+        NewValue NVARCHAR(MAX),
+        ChangedAt DATETIME
+    );
+
+    -- MERGE statement to update existing records or insert new ones
+    BEGIN TRY
+        MERGE INTO #TemporalData t
+        USING (
+            SELECT 
+                EntityId,
+                FieldName,
+                OldValue,
+                NewValue,
+                ChangedAt
+            FROM AuditChanges
+            WHERE EntityId = @EntityId
+            AND EntityType = @EntityType
+            AND ChangedAt <= @AsOfDate
+        ) s ON t.EntityId = s.EntityId AND t.FieldName = s.FieldName
+
+        WHEN MATCHED THEN
+            UPDATE SET 
+                t.OldValue = s.OldValue,
+                t.NewValue = s.NewValue,
+                t.ChangedAt = s.ChangedAt
+        WHEN NOT MATCHED BY TARGET THEN
+            INSERT (EntityId, FieldName, OldValue, NewValue, ChangedAt)
+            VALUES (s.EntityId, s.FieldName, s.OldValue, s.NewValue, s.ChangedAt);
+    END TRY
+    BEGIN CATCH
+        -- Handle errors that occur during the MERGE statement
+        DECLARE @ErrorMessage NVARCHAR(MAX);
+        SELECT @ErrorMessage = ERROR_MESSAGE();
+        RAISERROR ('An error occurred: %s', 16, 1, @ErrorMessage);
+    END CATCH
+
+    -- Fetch the most recent values for each field
+    WITH PointInTime AS (
+        SELECT 
+            EntityId,
+            FieldName,
+            NewValue AS CurrentValue,
+            ChangedAt
+        FROM #TemporalData
+    )
+
+    SELECT 
+        e.EntityId,
+        @EntityType AS EntityType,
+        @AsOfDate AS AsOfDate,
+        p.FieldName,
+        p.CurrentValue,
+        p.ChangedAt AS LastModified,
+        COUNT(al.ChangeId) OVER (PARTITION BY al.EntityId) AS TotalChangeCount
+    FROM PointInTime p
+    CROSS JOIN (SELECT DISTINCT EntityId FROM AuditChanges WHERE EntityId = @EntityId) e
+    JOIN AuditChanges al ON al.EntityId = @EntityId
+    ORDER BY p.FieldName;
+END
+
+### Response:
+
+
+======================================================================
+PROMPT 43 | language=stored_procedure | difficulty=easy
+======================================================================
+### Instruction:
+Convert the following STORED_PROCEDURE code to PySpark.
+Difficulty: easy
+
+### Input:
+-- Create a temporary table to store the result of the merge operation
+CREATE TEMPORARY TABLE #MergedOrders (
+    OrderID INT,
+    CustomerID INT,
+    ProductName NVARCHAR(100),
+    Quantity INT,
+    Price DECIMAL(10, 2)
+);
+
+-- Define a stored procedure to perform the merge operation
+CREATE PROCEDURE MergeOrderDetails (
+    @OrderId INT,
+    @CustomerID INT,
+    @ProductName NVARCHAR(100),
+    @Quantity INT,
+    @Price DECIMAL(10, 2)
+)
+AS
+BEGIN
+    -- Start a transaction
+    BEGIN TRANSACTION;
+
+    -- Try to insert the new order details into the target table
+    BEGIN TRY
+        INSERT INTO Orders (OrderID, CustomerID, ProductName, Quantity, Price)
+        VALUES (@OrderId, @CustomerID, @ProductName, @Quantity, @Price);
+
+        -- Insert the related order detail into the temporary table
+        INSERT INTO #MergedOrders (OrderID, CustomerID, ProductName, Quantity, Price)
+        VALUES (@OrderId, @CustomerID, @ProductName, @Quantity, @Price);
+    END TRY
+
+    BEGIN CATCH
+        -- Rollback the transaction in case of an error
+        ROLLBACK TRANSACTION;
+
+        -- Raise an exception with the error message
+        DECLARE @ErrorMessage NVARCHAR(4000);
+        SELECT @ErrorMessage = ERROR_MESSAGE();
+        RAISERROR('An error occurred while processing the order details: %s', 16, 1, @ErrorMessage);
+    END CATCH
+
+    -- Commit the transaction if no errors occur
+    COMMIT TRANSACTION;
+END;
+
+-- Example usage of the stored procedure
+EXEC MergeOrderDetails 101, 123, 'Widget', 5, 9.99;
+
+### Response:
+
+
+======================================================================
+PROMPT 44 | language=stored_procedure | difficulty=medium
+======================================================================
+### Instruction:
+Convert the following STORED_PROCEDURE code to PySpark.
+Difficulty: medium
+
+### Input:
+CREATE PROCEDURE GetInventoryAnalysis
+AS
+BEGIN
+    -- Create a temporary table to store the inventory data
+    CREATE TABLE #Inventory (
+        ProductID INT,
+        ProductName VARCHAR(100),
+        Quantity INT,
+        Price DECIMAL(10, 2)
+    );
+
+    -- Insert data into the temporary table
+    INSERT INTO #Inventory (ProductID, ProductName, Quantity, Price)
+    VALUES
+    (1, 'Laptop', 500, 999.99),
+    (2, 'Smartphone', 300, 799.99),
+    (3, 'Tablet', 400, 699.99);
+
+    -- Perform a MERGE operation to update inventory based on the quantity in the temporary table
+    BEGIN TRY
+        MERGE INTO Inventory AS T1
+        USING #Inventory AS T2
+        ON T1.ProductID = T2.ProductID
+        WHEN MATCHED THEN
+            UPDATE SET T1.Quantity = T1.Quantity + T2.Quantity
+        WHEN NOT MATCHED THEN
+            INSERT (ProductID, ProductName, Quantity, Price)
+            VALUES (T2.ProductID, T2.ProductName, T2.Quantity, T2.Price);
+    END TRY
+    BEGIN CATCH
+        -- Handle any errors that occur during the MERGE operation
+        DECLARE @ErrorMessage NVARCHAR(MAX) = ERROR_MESSAGE();
+        PRINT 'Error: ' + @ErrorMessage;
+    END CATCH;
+
+    -- Clean up the temporary table
+    DROP TABLE #Inventory;
+END
+
+### Response:
+
+
+======================================================================
+PROMPT 45 | language=stored_procedure | difficulty=easy
+======================================================================
+### Instruction:
+Convert the following STORED_PROCEDURE code to PySpark.
+Difficulty: easy
+
+### Input:
+CREATE PROCEDURE GetProductSales
+    @ProductId INT,
+    @StartDate DATE,
+    @EndDate DATE
+AS
+BEGIN
+    DECLARE @TotalSales DECIMAL(10, 2) = 0;
+
+    BEGIN TRY
+        -- Create a temporary table to store the product sales for the specified period
+        CREATE TABLE #TempProductSales (
+            ProductID INT,
+            SalesDate DATE,
+            SalesAmount DECIMAL(10, 2)
+        );
+
+        -- Populate the temporary table with sales data within the specified date range
+        INSERT INTO #TempProductSales (ProductID, SalesDate, SalesAmount)
+        SELECT P.ProductID, OD.SalesDate, OD.UnitPrice * OD.Quantity AS SalesAmount
+        FROM Products P
+        JOIN Order Details OD ON P.ProductID = OD.ProductID
+        WHERE OD.OrderDate BETWEEN @StartDate AND @EndDate;
+
+        -- Perform a merge operation to update the total sales
+        MERGE INTO ProductSales ps
+        USING #TempProductSales tp
+        ON ps.ProductID = tp.ProductID AND ps.SalesDate = tp.SalesDate
+        WHEN MATCHED THEN
+            UPDATE SET ps.TotalSales = ps.TotalSales + tp.SalesAmount
+        WHEN NOT MATCHED BY TARGET THEN
+            INSERT (ProductID, SalesDate, TotalSales) VALUES (tp.ProductID, tp.SalesDate, tp.SalesAmount);
+
+        -- Clean up the temporary table
+        DROP TABLE #TempProductSales;
+    END TRY
+    BEGIN CATCH
+        DECLARE @ErrorMessage NVARCHAR(MAX);
+        SET @ErrorMessage = ERROR_MESSAGE();
+
+        RAISERROR('An error occurred: %s', 16, 1, @ErrorMessage) WITH LOG;
+
+        -- Clean up the temporary table if an error occurs
+        IF OBJECT_ID('#TempProductSales') IS NOT NULL
+            DROP TABLE #TempProductSales;
+    END CATCH
+
+    -- Return the total sales for the specified product and date range
+    SELECT TotalSales FROM ProductSales WHERE ProductID = @ProductId AND SalesDate BETWEEN @StartDate AND @EndDate;
+END
+
+### Response:
+
+
+======================================================================
+PROMPT 46 | language=stored_procedure | difficulty=easy
+======================================================================
+### Instruction:
+Convert the following STORED_PROCEDURE code to PySpark.
+Difficulty: easy
+
+### Input:
+CREATE PROCEDURE GetTopRatedHotels
+    @MinStarRating INT,
+    @TopN INT
+AS
+BEGIN
+    SELECT TOP (@TopN)
+        HotelID, HotelName, ChainBrand, City, Country,
+        StarRating, AverageGuestScore, TotalReviews, PricePerNight
+    FROM HotelDirectory
+    WHERE StarRating >= @MinStarRating
+      AND IsOperational = 1
+    ORDER BY AverageGuestScore DESC, TotalReviews DESC;
+END
+
+### Response:
+
+
+======================================================================
+PROMPT 47 | language=stored_procedure | difficulty=medium
+======================================================================
+### Instruction:
+Convert the following STORED_PROCEDURE code to PySpark.
+Difficulty: medium
+
+### Input:
+CREATE PROCEDURE GetEmployeePerformanceMetrics
+    @EmployeeID INT,
+    @StartDate DATE,
+    @EndDate DATE,
+    @TotalSales DECIMAL(18,2) OUTPUT,
+    @SalesCount INT OUTPUT,
+    @AvgDealSize DECIMAL(18,2) OUTPUT,
+    @PerformanceTier NVARCHAR(20) OUTPUT,
+    @BonusEligible BIT OUTPUT,
+    @QuotaAttainmentPct DECIMAL(5,2) OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @QuotaTarget DECIMAL(18,2);
+
+    SELECT @QuotaTarget = q.QuotaAmount
+    FROM SalesQuotas q
+    WHERE q.EmployeeID = @EmployeeID
+      AND q.QuotaYear = YEAR(@StartDate);
+
+    SELECT
+        @TotalSales = ISNULL(SUM(s.SaleAmount), 0),
+        @SalesCount = COUNT(s.SaleID)
+    FROM Sales s
+    WHERE s.EmployeeID = @EmployeeID
+      AND s.SaleDate BETWEEN @StartDate AND @EndDate
+      AND s.Status = 'Won';
+
+    IF @SalesCount > 0
+        SET @AvgDealSize = @TotalSales / @SalesCount;
+    ELSE
+        SET @AvgDealSize = 0;
+
+    IF @QuotaTarget IS NULL OR @QuotaTarget = 0
+        SET @QuotaAttainmentPct = 0;
+    ELSE
+        SET @QuotaAttainmentPct = ROUND((@TotalSales / @QuotaTarget) * 100, 2);
+
+    IF @QuotaAttainmentPct >= 120
+    BEGIN
+        SET @PerformanceTier = 'ELITE';
+        SET @BonusEligible = 1;
+    END
+    ELSE IF @QuotaAttainmentPct >= 100
+    BEGIN
+        SET @PerformanceTier = 'ACHIEVER';
+        SET @BonusEligible = 1;
+    END
+    ELSE IF @QuotaAttainmentPct >= 80
+    BEGIN
+        SET @PerformanceTier = 'CONTRIBUTOR';
+        SET @BonusEligible = 0;
+    END
+    ELSE
+    BEGIN
+        SET @PerformanceTier = 'NEEDS_IMPROVEMENT';
+        SET @BonusEligible = 0;
+    END
+END
+
+### Response:
+
+
+======================================================================
+PROMPT 48 | language=stored_procedure | difficulty=easy
+======================================================================
+### Instruction:
+Convert the following STORED_PROCEDURE code to PySpark.
+Difficulty: easy
+
+### Input:
+CREATE PROCEDURE GetCustomerOrders
+AS
+BEGIN
+    DECLARE @CustomerId INT;
+    DECLARE @OrderID INT;
+
+    BEGIN TRY
+        -- Open a cursor to fetch customer IDs
+        OPEN cust_cursor FOR SELECT CustomerId FROM Customers;
+
+        -- Loop through each customer ID
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            SET @CustomerId = NULL;
+            FETCH NEXT FROM cust_cursor INTO @CustomerId;
+
+            -- Open a cursor to fetch orders for the current customer
+            OPEN order_cursor FOR SELECT OrderID FROM Orders WHERE CustomerId = @CustomerId;
+
+            -- Loop through each order ID
+            WHILE @@FETCH_STATUS = 0
+            BEGIN
+                SET @OrderID = NULL;
+                FETCH NEXT FROM order_cursor INTO @OrderID;
+
+                -- Output the order details
+                PRINT 'Customer ID: ' + CAST(@CustomerId AS VARCHAR) + ', Order ID: ' + CAST(@OrderID AS VARCHAR);
+
+                -- Close the order cursor
+                CLOSE order_cursor;
+            END
+
+            -- Deallocate the customer cursor
+            DEALLOCATE cust_cursor;
+        END
+
+        -- Close the cursor
+        CLOSE cust_cursor;
+    END TRY
+    BEGIN CATCH
+        -- Handle any errors that occur during the procedure execution
+        DECLARE @ErrorMessage NVARCHAR(MAX);
+        SET @ErrorMessage = ERROR_MESSAGE();
+        PRINT 'Error: ' + @ErrorMessage;
+
+        -- Rollback any changes made by the procedure
+        ROLLBACK TRANSACTION;
+    END CATCH;
+END
+
+### Response:
+
+
+======================================================================
+PROMPT 49 | language=stored_procedure | difficulty=hard
+======================================================================
+### Instruction:
+Convert the following STORED_PROCEDURE code to PySpark.
+Difficulty: hard
+
+### Input:
+CREATE PROCEDURE usp_CustomerOrdersReport
+    @StartDate DATE,
+    @EndDate   DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @cursor CURSOR FOR
+        SELECT customer_id, order_date, product_id, quantity
+        FROM dbo.orders
+        WHERE sale_date BETWEEN @StartDate AND @EndDate
+            AND product_id IN (SELECT product_id FROM dbo.inventory WHERE category = 'Electronics');
+
+    DECLARE @customer_id INT;
+    DECLARE @order_date DATE;
+    DECLARE @product_id INT;
+    DECLARE @quantity INT;
+
+    OPEN @cursor;
+
+    FETCH NEXT FROM @cursor INTO @customer_id, @order_date, @product_id, @quantity;
+
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        INSERT INTO dbo.customer_orders_report (customer_id, order_date, product_id, quantity)
+        VALUES (@customer_id, @order_date, @product_id, @quantity);
+
+        FETCH NEXT FROM @cursor INTO @customer_id, @order_date, @product_id, @quantity;
+    END;
+
+    CLOSE @cursor;
+    DEALLOCATE @cursor;
+END;
+
+### Response:
+
+
+======================================================================
+PROMPT 50 | language=stored_procedure | difficulty=easy
+======================================================================
+### Instruction:
+Convert the following STORED_PROCEDURE code to PySpark.
+Difficulty: easy
+
+### Input:
+CREATE PROCEDURE GetCustomerOrders
+    @CustomerId INT,
+    @DaysBack INT
+AS
+BEGIN
+    DECLARE @CutoffDate DATE;
+    SET @CutoffDate = DATEADD(DAY, -@DaysBack, GETDATE());
+
+    BEGIN TRY
+        MERGE INTO CustomerOrders AS Target
+        USING (
+            SELECT OrderID, CustomerID, OrderDate, TotalAmount
+            FROM Orders
+            WHERE CustomerID = @CustomerId AND OrderDate >= @CutoffDate
+        ) AS Source
+        ON Target.OrderID = Source.OrderID
+        WHEN MATCHED THEN
+            UPDATE SET Target.TotalAmount = Source.TotalAmount
+        WHEN NOT MATCHED THEN
+            INSERT (OrderID, CustomerID, OrderDate, TotalAmount)
+            VALUES (Source.OrderID, Source.CustomerID, Source.OrderDate, Source.TotalAmount);
+
+        SELECT * FROM CustomerOrders;
+    END TRY
+    BEGIN CATCH
+        DECLARE @ErrorMessage NVARCHAR(MAX);
+        SET @ErrorMessage = ERROR_MESSAGE();
+        RAISERROR('An error occurred: %s', 16, 1, @ErrorMessage) WITH NOWAIT;
+    END CATCH;
+END
+
+### Response:
+
+
