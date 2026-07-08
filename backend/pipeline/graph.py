@@ -349,7 +349,14 @@ def build_graph() -> Any:
 
 
 # Compile once at module level
-_pipeline = build_graph()
+# Lazy initialization — compile on first request, not at import time
+_pipeline = None
+
+def get_pipeline():
+    global _pipeline
+    if _pipeline is None:
+        _pipeline = build_graph()
+    return _pipeline
 
 
 # ---------- Public API ----------
@@ -389,7 +396,7 @@ def run_pipeline(
     }
 
     try:
-        final_state = _pipeline.invoke(initial_state)
+        final_state = get_pipeline().invoke(initial_state)
         # Remove internal fields before returning
         final_state.pop("start_time", None)
         result = dict(final_state)

@@ -36,8 +36,6 @@ app.add_middleware(
 
 from prometheus_fastapi_instrumentator import Instrumentator
 Instrumentator().instrument(app).expose(app)
-
-from pipeline.graph import run_pipeline
 from parsers.language_router import route, detect_language
 
 
@@ -185,6 +183,7 @@ def migrate_source(request: MigrateRequest) -> Any:
         raise HTTPException(status_code=400, detail="Source code cannot be empty")
 
     try:
+        from pipeline.graph import run_pipeline
         result = run_pipeline(
             source=request.source,
             source_language=request.source_language,
