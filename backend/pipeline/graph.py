@@ -109,7 +109,7 @@ def node_analyze(state: PipelineState) -> PipelineState:
         return state
 
 
-@traceable(name="node_retrieve")
+'''@traceable(name="node_retrieve")
 def node_retrieve(state: PipelineState) -> PipelineState:
     """Retrieve relevant PySpark patterns from hybrid RAG."""
     if state.get("status") == "error":
@@ -143,6 +143,51 @@ def node_retrieve(state: PipelineState) -> PipelineState:
 
         state["rag_context"] = rag_context
 
+        record_agent("retrieve", (time.time() - node_start) * 1000)
+        return state
+
+    except Exception as e:
+        state["error"] = f"node_retrieve failed: {str(e)}"
+        state["status"] = "error"
+        record_agent("retrieve", (time.time() - node_start) * 1000)
+        return state'''
+@traceable(name="node_retrieve")
+def node_retrieve(state: PipelineState) -> PipelineState:
+    """Retrieve relevant PySpark patterns from hybrid RAG.
+    Skips on low-memory deployments when DISABLE_RAG=true."""
+    if state.get("status") == "error":
+        return state
+    node_start = time.time()
+
+    # Skip RAG on memory-constrained deployments (e.g. Render free tier)
+    if os.getenv("DISABLE_RAG", "false").lower() == "true":
+        state["rag_context"] = []
+        record_agent("retrieve", (time.time() - node_start) * 1000)
+        return state
+
+    try:
+        retriever = get_retriever()
+        analyzer_output = state.get("analyzer_output", {})
+        ir = state.get("ir", {})
+
+        rag_query = analyzer_output.get("rag_query", "migrate sql to pyspark")
+        rag_context = retriever.retrieve(rag_query, top_k=5)
+
+        if analyzer_output.get("needs_procedural_context"):
+            source_language = ir.get("source_language", "sql")
+            procedural_query = (
+                f"{source_language} cursor loop exception handler "
+                f"procedural migration pyspark"
+            )
+            procedural_context = retriever.retrieve(procedural_query, top_k=3)
+            seen = {r["text"][:80] for r in rag_context}
+            for item in procedural_context:
+                key = item["text"][:80]
+                if key not in seen:
+                    rag_context.append(item)
+                    seen.add(key)
+
+        state["rag_context"] = rag_context
         record_agent("retrieve", (time.time() - node_start) * 1000)
         return state
 
@@ -198,6 +243,7 @@ def node_validate(state: PipelineState) -> PipelineState:
         state["status"] = "error"
         record_agent("validator", (time.time() - node_start) * 1000)
         return state
+
 
 
 @traceable(name="node_review")
