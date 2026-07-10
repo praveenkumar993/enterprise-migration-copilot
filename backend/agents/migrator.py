@@ -24,7 +24,7 @@ FALLBACK_MODEL_1 = f"{HF_USERNAME}/migration-copilot-qwen2-5-coder-1-5b-instruct
 # Fallback 2: public base model — always available, no fine-tuning
 FALLBACK_MODEL_2 = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
 
-HF_API_BASE = "https://api-inference.huggingface.co/models"
+HF_API_BASE = "https://router.huggingface.co/models"
 
 MAX_RETRIES = 3
 RETRY_WAIT = 10  # seconds
