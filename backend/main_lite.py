@@ -264,5 +264,17 @@ def debug_hf():
         results["model_response"] = r.text[:300]
     except Exception as e:
         results["model_endpoint"] = str(e)
+
+    # Test newer router endpoint
+    try:
+        r = requests.get(
+            "https://router.huggingface.co",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10
+        )
+        results["hf_router"] = r.status_code
+        results["hf_router_response"] = r.text[:200]
+    except Exception as e:
+        results["hf_router"] = str(e)
     
     return results
