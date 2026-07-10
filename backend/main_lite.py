@@ -222,3 +222,47 @@ def migrate_source(request: MigrateRequest):
             "processing_time_ms": round((time.time() - start_time) * 1000, 2),
             "error": str(e),
         }
+@app.get("/debug-hf")
+def debug_hf():
+    """Temporary debug endpoint — remove after fixing HF API issue."""
+    import requests
+    import os
+    
+    token = os.getenv("HF_TOKEN", "")
+    username = os.getenv("HF_USERNAME", "praveends")
+    results = {}
+    results["token_present"] = bool(token)
+    results["token_prefix"] = token[:8] + "..." if token else "MISSING"
+    results["username"] = username
+    
+    try:
+        r = requests.get("https://huggingface.co", timeout=10)
+        results["hf_main_site"] = r.status_code
+    except Exception as e:
+        results["hf_main_site"] = str(e)
+    
+    try:
+        r = requests.get(
+            "https://api-inference.huggingface.co/status",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10
+        )
+        results["hf_inference_api"] = r.status_code
+        results["hf_inference_response"] = r.text[:200]
+    except Exception as e:
+        results["hf_inference_api"] = str(e)
+    
+    model = f"{username}/migration-copilot-phi-3-5-mini-instruct"
+    try:
+        r = requests.post(
+            f"https://api-inference.huggingface.co/models/{model}",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"inputs": "SELECT 1", "parameters": {"max_new_tokens": 10}},
+            timeout=30
+        )
+        results["model_status"] = r.status_code
+        results["model_response"] = r.text[:300]
+    except Exception as e:
+        results["model_endpoint"] = str(e)
+    
+    return results
