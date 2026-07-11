@@ -279,13 +279,13 @@ def debug_hf():
     # Test router with actual model inference
     try:
         r = requests.post(
-            f"https://router.huggingface.co/models/{model}",
+            f"https://router.huggingface.co/hf-inference/models/{model}",
             headers={"Authorization": f"Bearer {token}"},
             json={"inputs": "SELECT 1", "parameters": {"max_new_tokens": 10}},
             timeout=30
         )
-        results["router_model_status"] = r.status_code
-        results["router_model_response"] = r.text[:300]
+        results["router_hf_inference_status"] = r.status_code
+        results["router_hf_inference_response"] = r.text[:300]
     except Exception as e:
-        results["router_model_error"] = str(e)
+        results["router_hf_inference_error"] = str(e)
     return results
