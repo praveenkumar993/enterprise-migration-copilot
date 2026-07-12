@@ -1,32 +1,25 @@
 """
 Migrator Agent — LLM-powered PySpark code generation.
-Calls HuggingFace Inference API with fine-tuned Phi-3.5-mini model.
-Falls back to Qwen2.5-Coder if fine-tuned model is cold-starting.
+Calls HuggingFace Space (Gradio API) with fine-tuned DeepSeek-1.3B model.
+Falls back to stub if Space is unavailable.
 """
 
 import os
 import time
+import json
 import requests
 from typing import Any
 from dotenv import load_dotenv
 
 load_dotenv()
 
-HF_TOKEN = os.getenv("HF_TOKEN", "")
 HF_USERNAME = os.getenv("HF_USERNAME", "praveends")
 
-# Primary: our best fine-tuned model (Phi-3.5-mini, 57% benchmark pass rate)
-PRIMARY_MODEL = f"{HF_USERNAME}/migration-copilot-phi-3-5-mini-instruct"
+# HuggingFace Space Gradio API endpoint
+SPACE_URL = f"https://{HF_USERNAME}-migration-copilot-inference.hf.space/call/generate"
 
-# Fallback 1: our second-best fine-tuned model (Qwen2.5, 45% pass rate)
-FALLBACK_MODEL_1 = f"{HF_USERNAME}/migration-copilot-qwen2-5-coder-1-5b-instruct"
-
-# Fallback 2: public base model — always available, no fine-tuning
-FALLBACK_MODEL_2 = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
-
-HF_API_BASE = "https://router.huggingface.co/hf-inference/models"
-MAX_RETRIES = 3
-RETRY_WAIT = 10  # seconds
+MAX_RETRIES = 2
+RETRY_WAIT = 5
 
 
 def build_prompt(
@@ -76,54 +69,58 @@ Difficulty: {difficulty}
     return prompt
 
 
-def call_hf_api(model: str, prompt: str) -> tuple[str, bool]:
+def call_space_api(prompt: str) -> tuple[str, bool]:
     """
-    Call HuggingFace Inference API with retry on cold start (503).
+    Call HuggingFace Space Gradio API for inference.
+    Uses Gradio's two-step API: submit job → poll result.
 
     Returns:
         (generated_text, success) tuple
     """
-    url = f"{HF_API_BASE}/{model}"
-    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "max_new_tokens": 500,
-            "temperature": 0.1,
-            "return_full_text": False,
-            "do_sample": False,
-        },
-    }
-
     for attempt in range(MAX_RETRIES):
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            # Step 1 — Submit job to Gradio queue
+            submit_response = requests.post(
+                SPACE_URL,
+                json={"data": [prompt]},
+                timeout=30,
+            )
 
-            # Model cold start — wait and retry
-            if response.status_code == 503:
-                try:
-                    body = response.json()
-                    wait = min(body.get("estimated_time", RETRY_WAIT), 30)
-                except Exception:
-                    wait = RETRY_WAIT
-                time.sleep(wait)
+            if submit_response.status_code == 503:
+                # Space is sleeping — wait and retry
+                time.sleep(15)
                 continue
 
-            if response.status_code == 200:
-                data = response.json()
-                if isinstance(data, list) and data:
-                    text = data[0].get("generated_text", "")
-                    return text, bool(text.strip())
-                elif isinstance(data, dict):
-                    text = data.get("generated_text", "")
-                    return text, bool(text.strip())
+            if submit_response.status_code != 200:
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(RETRY_WAIT)
+                continue
 
-            # Non-retryable error (404 model not found, 401 auth etc.)
-            if response.status_code in (401, 404):
-                return "", False
+            event_id = submit_response.json().get("event_id", "")
+            if not event_id:
+                continue
 
-            if attempt < MAX_RETRIES - 1:
-                time.sleep(RETRY_WAIT)
+            # Step 2 — Poll for result using event_id
+            result_response = requests.get(
+                f"{SPACE_URL}/{event_id}",
+                timeout=120,
+            )
+
+            if result_response.status_code != 200:
+                continue
+
+            # Parse SSE (Server-Sent Events) response
+            for line in result_response.text.split("\n"):
+                line = line.strip()
+                if line.startswith("data:"):
+                    try:
+                        data = json.loads(line[5:].strip())
+                        if isinstance(data, list) and data:
+                            generated = str(data[0]).strip()
+                            if generated:
+                                return generated, True
+                    except (json.JSONDecodeError, IndexError):
+                        continue
 
         except requests.Timeout:
             if attempt < MAX_RETRIES - 1:
@@ -162,13 +159,10 @@ def migrate(
     rag_context: list[dict],
 ) -> dict[str, Any]:
     """
-    Generate PySpark code from IR using fine-tuned LLM.
+    Generate PySpark code from IR using fine-tuned LLM via HuggingFace Space.
 
-    Model priority:
-    1. Phi-3.5-mini fine-tuned (best, 57% benchmark pass rate)
-    2. Qwen2.5-Coder fine-tuned (fallback, 45% pass rate)
-    3. Qwen2.5-Coder base (public, always available)
-    4. Stub with TODO comment (last resort)
+    Calls DeepSeek-1.3B fine-tuned model hosted on HuggingFace Spaces (ZeroGPU).
+    Falls back to stub if Space is unavailable or returns empty output.
 
     Args:
         ir: Unified IR dict from parser
@@ -180,27 +174,20 @@ def migrate(
     """
     prompt = build_prompt(ir, analyzer_output, rag_context)
 
-    if not HF_TOKEN:
-        return _stub_response(prompt, reason="HF_TOKEN not set")
+    # Call HuggingFace Space
+    code, success = call_space_api(prompt)
 
-    # Try each model in priority order
-    for model, label in [
-        (PRIMARY_MODEL, "phi-3.5-mini-finetuned"),
-        (FALLBACK_MODEL_1, "qwen2.5-finetuned"),
-        (FALLBACK_MODEL_2, "qwen2.5-base"),
-    ]:
-        code, success = call_hf_api(model, prompt)
-        if success and code.strip():
-            cleaned = clean_output(code)
-            if len(cleaned) > 20:  # sanity check — reject empty/trivial outputs
-                return {
-                    "pyspark_code": cleaned,
-                    "raw_response": code,
-                    "model_used": model,
-                    "prompt_used": prompt,
-                }
+    if success and code.strip() and len(code.strip()) > 20:
+        cleaned = clean_output(code)
+        if len(cleaned) > 20:
+            return {
+                "pyspark_code": cleaned,
+                "raw_response": code,
+                "model_used": f"{HF_USERNAME}/migration-copilot-deepseek-coder-1-3b-instruct",
+                "prompt_used": prompt,
+            }
 
-    return _stub_response(prompt, reason="All models failed or returned empty output")
+    return _stub_response(prompt, reason="Space API unavailable or returned empty output")
 
 
 def _stub_response(prompt: str, reason: str = "") -> dict[str, Any]:

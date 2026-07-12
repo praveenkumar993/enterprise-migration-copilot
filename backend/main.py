@@ -227,8 +227,14 @@ def migrate_source(request: MigrateRequest) -> Any:
         anti_patterns = []
         for ap in anti_patterns_raw:
             if isinstance(ap, str):
-                anti_patterns.append({"pattern": ap, "suggestion": ""})
-            elif isinstance(ap, dict):
+                # Try to parse if it looks like a dict string
+                try:
+                    import ast
+                    ap = ast.literal_eval(ap)
+                except Exception:
+                    anti_patterns.append({"pattern": ap, "suggestion": ""})
+                    continue
+            if isinstance(ap, dict):
                 anti_patterns.append({
                     "pattern": ap.get("pattern", ap.get("name", str(ap))),
                     "suggestion": ap.get("suggestion", ap.get("fix", "")),
