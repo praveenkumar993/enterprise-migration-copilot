@@ -2,7 +2,7 @@
 Enterprise Migration Copilot — Lightweight API for free tier deployment.
 Skips ChromaDB, LangGraph, and embedding model.
 Runs parser + agents directly without the full pipeline orchestration.
-Uses HF Inference API for LLM generation only.
+Uses HuggingFace Space (Gradio API) for LLM generation.
 """
 
 import os
@@ -122,7 +122,7 @@ def migrate_source(request: MigrateRequest):
         from agents.analyzer import analyze
         analyzer_output = analyze(ir)
 
-        # Step 3 — Migrate (no RAG context — empty list)
+        # Step 3 — Migrate via HuggingFace Space (no RAG context)
         from agents.migrator import migrate
         migrator_output = migrate(ir, analyzer_output, rag_context=[])
         pyspark_code = migrator_output.get("pyspark_code", "")
@@ -144,7 +144,7 @@ def migrate_source(request: MigrateRequest):
         validation_passed = validation.get("passed", False)
         status = "success" if validation_passed else "low_confidence"
 
-        # Flatten response
+        # Flatten validation score
         raw_score = validation.get("validation_score", 0)
         if isinstance(raw_score, float) and raw_score <= 1.0:
             validation_score = round(raw_score * 100)
@@ -158,14 +158,14 @@ def migrate_source(request: MigrateRequest):
         compliance_flags = risk.get("compliance_flags", [])
         procedural_flags = analyzer_output.get("procedural_flags", [])
 
+        # Normalize anti-patterns
         anti_patterns_raw = optimization.get("anti_patterns", [])
         anti_patterns = []
         for ap in anti_patterns_raw:
             if isinstance(ap, str):
-                # Try to parse if it looks like a dict string
                 try:
-                    import ast
-                    ap = ast.literal_eval(ap)
+                    import ast as _ast
+                    ap = _ast.literal_eval(ap)
                 except Exception:
                     anti_patterns.append({"pattern": ap, "suggestion": ""})
                     continue
@@ -222,70 +222,3 @@ def migrate_source(request: MigrateRequest):
             "processing_time_ms": round((time.time() - start_time) * 1000, 2),
             "error": str(e),
         }
-@app.get("/debug-hf")
-def debug_hf():
-    """Temporary debug endpoint — remove after fixing HF API issue."""
-    import requests
-    import os
-    
-    token = os.getenv("HF_TOKEN", "")
-    username = os.getenv("HF_USERNAME", "praveends")
-    results = {}
-    results["token_present"] = bool(token)
-    results["token_prefix"] = token[:8] + "..." if token else "MISSING"
-    results["username"] = username
-    
-    try:
-        r = requests.get("https://huggingface.co", timeout=10)
-        results["hf_main_site"] = r.status_code
-    except Exception as e:
-        results["hf_main_site"] = str(e)
-    
-    try:
-        r = requests.get(
-            "https://api-inference.huggingface.co/status",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10
-        )
-        results["hf_inference_api"] = r.status_code
-        results["hf_inference_response"] = r.text[:200]
-    except Exception as e:
-        results["hf_inference_api"] = str(e)
-    
-    model = f"{username}/migration-copilot-phi-3-5-mini-instruct"
-    try:
-        r = requests.post(
-            f"https://api-inference.huggingface.co/models/{model}",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"inputs": "SELECT 1", "parameters": {"max_new_tokens": 10}},
-            timeout=30
-        )
-        results["model_status"] = r.status_code
-        results["model_response"] = r.text[:300]
-    except Exception as e:
-        results["model_endpoint"] = str(e)
-
-    # Test newer router endpoint
-    try:
-        r = requests.get(
-            "https://router.huggingface.co",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10
-        )
-        results["hf_router"] = r.status_code
-        results["hf_router_response"] = r.text[:200]
-    except Exception as e:
-        results["hf_router"] = str(e)
-    # Test router with actual model inference
-    try:
-        r = requests.post(
-            f"https://router.huggingface.co/hf-inference/models/{model}",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"inputs": "SELECT 1", "parameters": {"max_new_tokens": 10}},
-            timeout=30
-        )
-        results["router_hf_inference_status"] = r.status_code
-        results["router_hf_inference_response"] = r.text[:300]
-    except Exception as e:
-        results["router_hf_inference_error"] = str(e)
-    return results
