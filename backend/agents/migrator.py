@@ -83,12 +83,12 @@ def call_space_api(prompt: str) -> tuple[str, bool]:
             submit_response = requests.post(
                 SPACE_URL,
                 json={"data": [prompt]},
-                timeout=30,
+                timeout=60,
             )
 
             if submit_response.status_code == 503:
                 # Space is sleeping — wait and retry
-                time.sleep(15)
+                time.sleep(30)
                 continue
 
             if submit_response.status_code != 200:
