@@ -16,7 +16,8 @@ load_dotenv()
 HF_USERNAME = os.getenv("HF_USERNAME", "praveends")
 
 # HuggingFace Space Gradio API endpoint
-SPACE_URL = f"https://{HF_USERNAME}-migration-copilot-inference.hf.space/call/generate"
+SPACE_BASE = f"https://{HF_USERNAME}-migration-copilot-inference.hf.space"
+SPACE_URL = f"{SPACE_BASE}/gradio_api/queue/join"
 
 MAX_RETRIES = 2
 RETRY_WAIT = 5
@@ -70,67 +71,54 @@ Difficulty: {difficulty}
 
 
 def call_space_api(prompt: str) -> tuple[str, bool]:
-    """
-    Call HuggingFace Space Gradio API for inference.
-    Uses Gradio's two-step API: submit job → poll result.
+    try:
+        # Gradio 6 queue API
+        submit_response = requests.post(
+            SPACE_URL,
+            json={
+                "data": [prompt],
+                "fn_index": 0,
+                "session_hash": "render123"
+            },
+            timeout=60,
+        )
 
-    Returns:
-        (generated_text, success) tuple
-    """
-    for attempt in range(MAX_RETRIES):
-        try:
-            # Step 1 — Submit job to Gradio queue
-            submit_response = requests.post(
-                SPACE_URL,
-                json={"data": [prompt]},
-                timeout=60,
-            )
+        if submit_response.status_code == 503:
+            time.sleep(30)
+            return call_space_api(prompt)
 
-            if submit_response.status_code == 503:
-                # Space is sleeping — wait and retry
-                time.sleep(30)
-                continue
+        if submit_response.status_code != 200:
+            return "", False
 
-            if submit_response.status_code != 200:
-                if attempt < MAX_RETRIES - 1:
-                    time.sleep(RETRY_WAIT)
-                continue
+        event_id = submit_response.json().get("event_id", "")
+        if not event_id:
+            return "", False
 
-            event_id = submit_response.json().get("event_id", "")
-            if not event_id:
-                continue
+        # Poll for result
+        result_response = requests.get(
+            f"{SPACE_BASE}/gradio_api/queue/data?session_hash=render123",
+            timeout=120,
+            stream=True,
+        )
 
-            # Step 2 — Poll for result using event_id
-            result_response = requests.get(
-                f"{SPACE_URL}/{event_id}",
-                timeout=120,
-            )
-
-            if result_response.status_code != 200:
-                continue
-
-            # Parse SSE (Server-Sent Events) response
-            for line in result_response.text.split("\n"):
-                line = line.strip()
-                if line.startswith("data:"):
+        for line in result_response.iter_lines():
+            if line:
+                decoded = line.decode("utf-8")
+                if decoded.startswith("data:"):
                     try:
-                        data = json.loads(line[5:].strip())
-                        if isinstance(data, list) and data:
-                            generated = str(data[0]).strip()
-                            if generated:
-                                return generated, True
-                    except (json.JSONDecodeError, IndexError):
+                        data = json.loads(decoded[5:].strip())
+                        if data.get("msg") == "process_completed":
+                            output = data.get("output", {})
+                            result = output.get("data", [])
+                            if result:
+                                return str(result[0]).strip(), True
+                    except Exception:
                         continue
 
-        except requests.Timeout:
-            if attempt < MAX_RETRIES - 1:
-                time.sleep(RETRY_WAIT)
-        except Exception:
-            if attempt < MAX_RETRIES - 1:
-                time.sleep(RETRY_WAIT)
+        return "", False
 
-    return "", False
-
+    except Exception:
+        return "", False
 
 def clean_output(raw: str) -> str:
     """
