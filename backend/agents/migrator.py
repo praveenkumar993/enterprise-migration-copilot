@@ -16,8 +16,8 @@ load_dotenv()
 HF_USERNAME = os.getenv("HF_USERNAME", "praveends")
 
 # HuggingFace Space Gradio API endpoint
-SPACE_BASE = f"https://{HF_USERNAME}-migration-copilot-inference.hf.space"
-SPACE_URL = f"{SPACE_BASE}/gradio_api/queue/join"
+# SPACE_BASE = f"https://{HF_USERNAME}-migration-copilot-inference.hf.space"
+# SPACE_URL = f"{SPACE_BASE}/gradio_api/queue/join"
 
 MAX_RETRIES = 2
 RETRY_WAIT = 5
@@ -71,53 +71,24 @@ Difficulty: {difficulty}
 
 
 def call_space_api(prompt: str) -> tuple[str, bool]:
+    """
+    Call HuggingFace Space using gradio_client library.
+    Handles Gradio API versioning automatically.
+    """
     try:
-        # Gradio 6 queue API
-        submit_response = requests.post(
-            SPACE_URL,
-            json={
-                "data": [prompt],
-                "fn_index": 0,
-                "session_hash": "render123"
-            },
-            timeout=60,
+        from gradio_client import Client
+        client = Client(
+            f"https://{HF_USERNAME}-migration-copilot-inference.hf.space",
+            verbose=False,
         )
-
-        if submit_response.status_code == 503:
-            time.sleep(30)
-            return call_space_api(prompt)
-
-        if submit_response.status_code != 200:
-            return "", False
-
-        event_id = submit_response.json().get("event_id", "")
-        if not event_id:
-            return "", False
-
-        # Poll for result
-        result_response = requests.get(
-            f"{SPACE_BASE}/gradio_api/queue/data?session_hash=render123",
-            timeout=120,
-            stream=True,
+        result = client.predict(
+            prompt=prompt,
+            api_name="/generate",
         )
-
-        for line in result_response.iter_lines():
-            if line:
-                decoded = line.decode("utf-8")
-                if decoded.startswith("data:"):
-                    try:
-                        data = json.loads(decoded[5:].strip())
-                        if data.get("msg") == "process_completed":
-                            output = data.get("output", {})
-                            result = output.get("data", [])
-                            if result:
-                                return str(result[0]).strip(), True
-                    except Exception:
-                        continue
-
+        if result and str(result).strip():
+            return str(result).strip(), True
         return "", False
-
-    except Exception:
+    except Exception as e:
         return "", False
 
 def clean_output(raw: str) -> str:
