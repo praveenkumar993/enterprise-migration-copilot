@@ -109,6 +109,10 @@ def clean_output(raw: str) -> str:
         raw = raw[3:]
     if raw.endswith("```"):
         raw = raw[:-3]
+    # Remove trailing prompt artifacts
+    for artifact in ["### End", "###End", "### Difficulty", "### Instruction"]:
+        if artifact in raw:
+            raw = raw[:raw.index(artifact)].strip()
     return raw.strip()
 
 
