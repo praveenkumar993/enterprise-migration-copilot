@@ -216,7 +216,7 @@ export default function App() {
       setAnimating(true);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
-  }, [src, lang, dialect, apiUrl]);
+  }, [src, lang, dialect, apiUrl, loading]);
 
   const statusC = result
     ? result.status === "success" ? C.green
