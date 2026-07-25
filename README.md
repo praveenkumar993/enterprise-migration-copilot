@@ -10,11 +10,10 @@ Built as a zero-cost portfolio project targeting real fintech migration pain: le
 
 | Service | URL |
 |---|---|
-| 🌐 Frontend | *Coming soon — deploying to Vercel* |
-| ⚙️ API | *Coming soon — deploying to Render* |
-| 📊 Dataset | [praveends/enterprise-migration-dataset](https://huggingface.co/datasets/praveends/enterprise-migration-dataset) |
-| 🤗 Best Model | [migration-copilot-phi-3-5-mini-instruct](https://huggingface.co/praveends/migration-copilot-phi-3-5-mini-instruct) |
-
+| 🌐 Frontend | https://enterprise-migration-copilot.vercel.app |
+| ⚙️ API | https://enterprise-migration-copilot.onrender.com |
+| 📊 Dataset | https://huggingface.co/datasets/praveends/enterprise-migration-dataset |
+| 🤗 Best Model | https://huggingface.co/praveends/migration-copilot-phi-3-5-mini-instruct |
 ---
 
 ## What It Does
